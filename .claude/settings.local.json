@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python main.py)",
+      "Bash(python tune_rounds.py)",
+      "Bash(python diagnose.py)"
+    ]
+  }
+}
