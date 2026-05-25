@@ -57,7 +57,7 @@ class RandomStrategy(Strategy):
     Holds back Launch Now unless forced (i.e., not enough other cards).
     """
 
-    def __init__(self, rng: random.Random = None):
+    def __init__(self, rng: random.Random | None = None):
         self._rng = rng or random.Random()
 
     def choose_deployment(self, view: PlayerView) -> dict:
@@ -162,8 +162,8 @@ class BalancedStrategy(Strategy):
 
         for _ in range(n):
             best_score = -1.0
-            best_mod = None
-            best_card_idx = None
+            best_mod = 0
+            best_card_idx = 0
 
             for mod_idx in remaining_mods:
                 for ci, card in enumerate(hand):

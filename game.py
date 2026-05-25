@@ -14,7 +14,7 @@ from config import GameConfig
 # ---------------------------------------------------------------------------
 
 class Deck:
-    def __init__(self, config: GameConfig, rng: random.Random = None):
+    def __init__(self, config: GameConfig, rng: random.Random | None = None):
         self._rng = rng or random.Random()
         cards: list = []
         cards.extend([Scientists()]   * config.scientists_count)
@@ -93,7 +93,7 @@ class Game:
         self,
         config: GameConfig,
         strategies: list,
-        rng: random.Random = None,
+        rng: random.Random | None = None,
     ):
         self.config = config
         self.strategies = strategies

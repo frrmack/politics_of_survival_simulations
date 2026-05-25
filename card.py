@@ -30,7 +30,10 @@ class StandardCard(Card):
 
 @dataclass(frozen=True)
 class SpecialCard(Card):
-    pass
+    @abstractmethod
+    def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
+        """Apply this card's effect to the game."""
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -106,5 +109,8 @@ class DoubleAgent(SpecialCard):
         if da2:
             return None, c1   # P2 plays P1's card; P1 plays nothing
         return c1, c2
-
+    
+    def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
+        # DoubleAgent's effect is handled separately in replay.py, since it depends on the opponent's card
+        pass
 

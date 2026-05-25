@@ -95,14 +95,14 @@ STRATEGY_LABELS = ["Human", "Cooperative", "Aggressive", "Balanced", "Random"]
 
 class HumanStrategy(Strategy):
     def __init__(self):
-        self._deployment = None
+        self._deployment = {}
 
     def set_deployment(self, d):
         self._deployment = d
 
     def choose_deployment(self, view: PlayerView) -> dict:
         d = self._deployment
-        self._deployment = None
+        self._deployment = {}
         return d
 
 # ---------------------------------------------------------------------------
