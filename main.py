@@ -13,7 +13,11 @@ def matchup(config, s1, s2, n=5000):
 
 
 def main():
-    config = GameConfig()
+    config = GameConfig(num_rounds=5, 
+                        num_modules=5, 
+                        modules_needed_to_launch=4,
+                        module_dev_level_init=lambda rng: rng.randint(1, 6)
+                        )
 
     print("\n=== Politics of Survival — Baseline (5 modules, 5 rounds) ===\n")
 
