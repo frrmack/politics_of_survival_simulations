@@ -162,8 +162,8 @@ class ReplayGame(Game):
 def replay(
     strategy_p1: Strategy,
     strategy_p2: Strategy,
-    config: GameConfig = None,
-    seed: int = None,
+    config: GameConfig | None = None,
+    seed: int | None = None,
 ) -> object:
     """
     Run and trace a single game between two strategies.
