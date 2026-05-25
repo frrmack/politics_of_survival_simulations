@@ -17,7 +17,7 @@ def main():
 
     print("\n=== Politics of Survival — Baseline (5 modules, 5 rounds) ===\n")
 
-    matchup(config, RandomStrategy(),      RandomStrategy())
+    #matchup(config, RandomStrategy(),      RandomStrategy())
     matchup(config, CooperativeStrategy(), CooperativeStrategy())
     matchup(config, AggressiveStrategy(),  AggressiveStrategy())
     matchup(config, CooperativeStrategy(), AggressiveStrategy())
