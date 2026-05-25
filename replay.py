@@ -60,7 +60,7 @@ class ReplayGame(Game):
             status = "READY" if m.is_ready else f"need +{m.READY_THRESHOLD - m.dev_level}"
             d = m.influence[0] - m.influence[1]
             lead = f"  P1 +{d}" if d > 0 else (f"  P2 +{-d}" if d < 0 else "")
-            print(f"    M{m.index+1}  dev={m.dev_level}  [{status:>9}]"
+            print(f"    M{m.index+1}  dev= {m.dev_level}  [{status:>9}]"
                   f"  P1={m.influence[0]:>3}  P2={m.influence[1]:>3}{lead}")
 
         # Hands before deployment
@@ -125,8 +125,8 @@ class ReplayGame(Game):
 
             status = "READY" if module.is_ready else f"need +{module.READY_THRESHOLD - module.dev_level}"
             print(f"    M{mod_idx+1}  P1: {_abbr(c1_raw):<3}  P2: {_abbr(c2_raw):<3}"
-                  f"  →  {'  '.join(effects):<26}{note_str}"
-                  f"   [{status:>9}  P1= {module.influence[0]}  P2= {module.influence[1]}]")
+                  f"  →  {'  '.join(effects):<26}"
+                  f"   [{status:>8}   P1= {module.influence[0]:>2}  P2= {module.influence[1]:>2}]   {note_str}")
 
         record.launch_triggered = launch_now
         self.history.append(record)
@@ -188,7 +188,7 @@ def replay(
     print("\n  Initial module dev levels:")
     for m in game.modules:
         status = "READY" if m.is_ready else f"need +{m.READY_THRESHOLD - m.dev_level}"
-        print(f"    M{m.index+1}  dev={m.dev_level}  [{status}]")
+        print(f"    M{m.index+1}  dev= {m.dev_level}  [{status}]")
 
     result = game.play()
 
