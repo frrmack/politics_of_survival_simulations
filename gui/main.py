@@ -729,7 +729,7 @@ class App:
         draw_text(s, f"Rounds played: {result.rounds_played}   Ready modules: {result.ready_modules}",
                   self.f_body, GREY, W//2, 155)
 
-        self._draw_modules(s, top=256, interactive=False, show_winner=True)
+        self._draw_modules(s, top=256, interactive=False)
 
         btn = pygame.Rect(W//2 - 130, H - 75, 260, 52)
         draw_button(s, "Play Again", self.f_h2, btn, (40, 80, 40), border_color=GREEN)
@@ -747,7 +747,7 @@ class App:
 
     def _draw_modules(self, surf, top=130, interactive=False,
                       show_assignments=False, deploy_player=None,
-                      small_die=False, show_winner=False, played_cards=None,
+                      small_die=False, played_cards=None,
                       before_state=None):
         g = self.game
         n = g.config.num_modules
@@ -808,11 +808,9 @@ class App:
             else:
                 diff = mod.influence[0] - mod.influence[1]
                 if diff > 0:
-                    inf_col = GOLD if show_winner else P1_COLOR
-                    draw_text(surf, f"P1 +{diff}", self.f_small, inf_col, cx, inf_y)
+                    draw_text(surf, f"P1 +{diff}", self.f_small, P1_COLOR, cx, inf_y)
                 elif diff < 0:
-                    inf_col = GOLD if show_winner else P2_COLOR
-                    draw_text(surf, f"P2 +{-diff}", self.f_small, inf_col, cx, inf_y)
+                    draw_text(surf, f"P2 +{-diff}", self.f_small, P2_COLOR, cx, inf_y)
 
             # Assignment indicator
             if show_assignments and mi in self.assignments:
