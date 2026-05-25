@@ -175,7 +175,9 @@ class Game:
         self.deck = Deck(config, rng=self._rng)
 
         self.modules = [
-            Module(index=i, dev_level=self._rng.randint(1, 6))
+            Module(config=self.config,
+                   index=i, 
+                   dev_level=self._rng.randint(1, 6))
             for i in range(config.num_modules)
         ]
 

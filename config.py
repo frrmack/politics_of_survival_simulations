@@ -8,12 +8,17 @@ class GameConfig:
     num_modules: int = 5
     hand_size: int = 8
     modules_needed_to_launch: int = 4
-    ready_threshold: int = 5          # minimum dev level for a module to be "ready"
+
+    # Module parameters
+    module_min_development: int = 1
+    module_max_development: int = 6
+    module_ready_threshold: int = 5     # min dev level of a module ready for launch
 
     # Deck composition — main types (1:1:1 ratio by default)
-    scientists_count: int = 10
-    colonists_count: int = 10
-    military_count: int = 10
+    scientists_count: int = 20
+    colonists_count: int = 20
+    military_count: int = 20
+
 
     # Special cards (excluded from play; set > 0 to reintroduce individually)
     genius_count: int = 0

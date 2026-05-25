@@ -1,16 +1,19 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, InitVar
 from typing import Optional
+from config import GameConfig
 
 
 @dataclass
 class Module:
+    config: InitVar[GameConfig]
     index: int
     dev_level: int
     influence: list = field(default_factory=lambda: [0, 0])
 
-    DEV_MIN = 1
-    DEV_MAX = 6
-    READY_THRESHOLD = 5
+    def __post_init__(self, config):
+        self.DEV_MIN = config.module_min_development
+        self.DEV_MAX = config.module_max_development
+        self.READY_THRESHOLD = config.module_ready_threshold
 
     @property
     def is_ready(self) -> bool:

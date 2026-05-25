@@ -152,7 +152,7 @@ class BalancedStrategy(Strategy):
                 return -999.0
 
             m = view.modules[mod_idx]
-            dev_gap = max(0, view.config.ready_threshold - m.dev_level)
+            dev_gap = max(0, view.config.module_ready_threshold - m.dev_level)
             inf_gap = m.influence[opp] - m.influence[p]   # positive = we're behind
 
             dev_value = {
