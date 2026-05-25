@@ -177,7 +177,7 @@ class Game:
         self.modules = [
             Module(config=self.config,
                    index=i, 
-                   dev_level=self._rng.randint(1, 6))
+                   dev_level=self.config.module_dev_level_init(self._rng))
             for i in range(config.num_modules)
         ]
 

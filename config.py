@@ -1,3 +1,4 @@
+from ctypes import Union
 from dataclasses import dataclass
 
 
@@ -13,18 +14,33 @@ class GameConfig:
     module_min_development: int = 1
     module_max_development: int = 6
     module_ready_threshold: int = 5     # min dev level of a module ready for launch
+    module_dev_level_init: Union[callable, list] = field(
+        default_factory=lambda: lambda rng: rng.randint(1, 6)
+    ) # This is how module dev levels are initialized at the start of each game; 
+      # can be a RNG function or a list of ints for deterministic setups.
+      # The default is randomly choosing between 1 and 6 for each module.
+      # Examples:
+      # config_default = GameConfig()
+      # config_list    = GameConfig(module_dev_level_init=[1, 2, 3, 4, 5])
+      # config_custom  = GameConfig(module_dev_level_init=lambda rng: rng.randint(1, 4))
 
     # Deck composition — main types (1:1:1 ratio by default)
     scientists_count: int = 20
     colonists_count: int = 20
     military_count: int = 20
 
-
     # Special cards (excluded from play; set > 0 to reintroduce individually)
     genius_count: int = 0
     sabotage_count: int = 0
     launch_now_count: int = 0
     double_agent_count: int = 0
+
+    def __post_init__(self):
+        if isinstance(self.module_dev_level_init, list):
+            levels = self.module_dev_level_init.copy()  # avoid mutating the original
+            self.module_dev_level_init = lambda rng: levels.pop(0)
+        # This allows for deterministic module dev levels by passing a list of ints
+        # OR defining a RNG function.
 
     @property
     def deck_size(self) -> int:
