@@ -37,12 +37,6 @@ class GameConfig:
     launch_now_count: int = 0
     double_agent_count: int = 0
 
-    def __post_init__(self):
-        if isinstance(self.module_dev_level_init, list):
-            levels = self.module_dev_level_init.copy()  # avoid mutating the original
-            self.module_dev_level_init = lambda rng: levels.pop(0)
-        # This allows for deterministic module dev levels by passing a list of ints
-        # OR defining a RNG function.
 
     @property
     def deck_size(self) -> int:

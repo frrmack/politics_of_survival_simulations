@@ -101,10 +101,15 @@ class Game:
 
         self.deck = Deck(config, rng=self._rng)
 
+        init = config.module_dev_level_init
+        if isinstance(init, list):
+            levels = list(init)
+            dev_init = lambda _: levels.pop(0)
+        else:
+            dev_init = init
+
         self.modules = [
-            Module(config=self.config,
-                   index=i, 
-                   dev_level=self.config.module_dev_level_init(self._rng))
+            Module(config=self.config, index=i, dev_level=dev_init(self._rng))
             for i in range(config.num_modules)
         ]
 

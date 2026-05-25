@@ -16,7 +16,8 @@ def main():
     config = GameConfig(num_rounds=5, 
                         num_modules=5, 
                         modules_needed_to_launch=4,
-                        module_dev_level_init=lambda rng: rng.randint(1, 6)
+                        #module_dev_level_init=lambda rng: rng.randint(1, 6)
+                        module_dev_level_init=[1,2,3,4,5] # deterministic setup for easier debugging
                         )
 
     print("\n=== Politics of Survival — Baseline (5 modules, 5 rounds) ===\n")
