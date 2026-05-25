@@ -2,7 +2,9 @@ import random
 from dataclasses import dataclass, field
 from typing import Optional
 
-from card import Card, CardType
+from card import (Card, StandardCard, SpecialCard,
+                  Scientists, Colonists, Military,
+                  Genius, Sabotage, LaunchNow, DoubleAgent)
 from module import Module
 from config import GameConfig
 
@@ -15,13 +17,13 @@ class Deck:
     def __init__(self, config: GameConfig, rng: random.Random = None):
         self._rng = rng or random.Random()
         cards: list = []
-        cards.extend([Card(CardType.SCIENTISTS)]   * config.scientists_count)
-        cards.extend([Card(CardType.COLONISTS)]    * config.colonists_count)
-        cards.extend([Card(CardType.MILITARY)]     * config.military_count)
-        cards.extend([Card(CardType.GENIUS)]       * config.genius_count)
-        cards.extend([Card(CardType.SABOTAGE)]     * config.sabotage_count)
-        cards.extend([Card(CardType.LAUNCH_NOW)]   * config.launch_now_count)
-        cards.extend([Card(CardType.DOUBLE_AGENT)] * config.double_agent_count)
+        cards.extend([Scientists()]   * config.scientists_count)
+        cards.extend([Colonists()]    * config.colonists_count)
+        cards.extend([Military()]     * config.military_count)
+        cards.extend([Genius()]       * config.genius_count)
+        cards.extend([Sabotage()]     * config.sabotage_count)
+        cards.extend([LaunchNow()]    * config.launch_now_count)
+        cards.extend([DoubleAgent()]  * config.double_agent_count)
         self._rng.shuffle(cards)
         self._draw: list = cards
         self._discard: list = []
@@ -40,81 +42,6 @@ class Deck:
     def discard(self, cards: list) -> None:
         self._discard.extend(cards)
 
-
-# ---------------------------------------------------------------------------
-# Resolution logic
-# ---------------------------------------------------------------------------
-
-def _apply_card_effect(module: Module, card: Card, player_idx: int) -> None:
-    """Apply one card's effect for the given player. DA and Launch Now handled upstream."""
-    ct = card.card_type
-    if ct == CardType.SCIENTISTS:
-        module.add_influence(player_idx, 1)
-        module.adjust_dev(1)
-    elif ct == CardType.COLONISTS:
-        module.add_influence(player_idx, 2)
-    elif ct == CardType.MILITARY:
-        module.add_influence(player_idx, 3)
-    elif ct == CardType.GENIUS:
-        module.add_influence(player_idx, 2)
-        module.adjust_dev(1)
-    elif ct == CardType.SABOTAGE:
-        module.adjust_dev(-1)
-
-
-def _resolve_double_agent(
-    c1: Optional[Card], c2: Optional[Card]
-) -> tuple:
-    """
-    Returns (effective_c1, effective_c2) after Double Agent resolution.
-    DA steals the rival's card: rival plays nothing, DA player plays the stolen card.
-    DA vs DA: both cancel — both play nothing.
-    """
-    da1 = c1 is not None and c1.card_type == CardType.DOUBLE_AGENT
-    da2 = c2 is not None and c2.card_type == CardType.DOUBLE_AGENT
-
-    if da1 and da2:
-        return None, None
-    if da1:
-        return c2, None   # P1 plays P2's card; P2 plays nothing
-    if da2:
-        return None, c1   # P2 plays P1's card; P1 plays nothing
-    return c1, c2
-
-
-def resolve_module(module: Module, card_p1: Card, card_p2: Card) -> bool:
-    """
-    Apply both deployed cards' effects to the module.
-    Returns True if Launch Now was triggered.
-    """
-    launch_now = (
-        card_p1.card_type == CardType.LAUNCH_NOW
-        or card_p2.card_type == CardType.LAUNCH_NOW
-    )
-
-    # Strip out Launch Now cards; they have no module effect
-    c1 = None if card_p1.card_type == CardType.LAUNCH_NOW else card_p1
-    c2 = None if card_p2.card_type == CardType.LAUNCH_NOW else card_p2
-
-    if c1 is None and c2 is None:
-        return launch_now
-
-    c1, c2 = _resolve_double_agent(c1, c2)
-
-    # Military vs Military: both get influence but development drops
-    if (c1 is not None and c1.card_type == CardType.MILITARY
-            and c2 is not None and c2.card_type == CardType.MILITARY):
-        module.add_influence(0, 3)
-        module.add_influence(1, 3)
-        module.adjust_dev(-2)
-        return launch_now
-
-    if c1 is not None:
-        _apply_card_effect(module, c1, player_idx=0)
-    if c2 is not None:
-        _apply_card_effect(module, c2, player_idx=1)
-
-    return launch_now
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +150,7 @@ class Game:
             c1 = deployments[0][mod_idx]
             c2 = deployments[1][mod_idx]
             record.deployments[mod_idx] = (c1, c2)
-            if resolve_module(module, c1, c2):
+            if self.resolve_module(module, c1, c2):
                 launch_now = True
 
         record.launch_triggered = launch_now
@@ -303,3 +230,49 @@ class Game:
             final_modules=list(self.modules),
             history=list(self.history),
         )
+    
+    def trigger_launch(self, module: Module) -> None:
+        """Called by LaunchNow card during resolution."""
+        self.game_over = True
+        self.early_launch = True
+
+    # resolution logic
+    def resolve_module(self, module: Module, card_p1: Card, card_p2: Card) -> bool:
+        launch_now = isinstance(card_p1, LaunchNow) or isinstance(card_p2, LaunchNow)
+
+        c1 = None if isinstance(card_p1, LaunchNow) else card_p1
+        c2 = None if isinstance(card_p2, LaunchNow) else card_p2
+
+        if launch_now:
+            if isinstance(card_p1, LaunchNow):
+                card_p1.resolve(module, player_idx=0, game=self)
+            if isinstance(card_p2, LaunchNow):
+                card_p2.resolve(module, player_idx=1, game=self)
+
+        if c1 is None and c2 is None:
+            return launch_now
+
+        # Double Agent resolution
+        if isinstance(c1, DoubleAgent):
+            c1, c2 = c1.resolve_pair(c1, c2)
+        elif isinstance(c2, DoubleAgent):
+            c1, c2 = c2.resolve_pair(c1, c2)
+
+        # Military vs Military special case
+        if isinstance(c1, Military) and isinstance(c2, Military):
+            c1.apply_vs_military(module, player_idx=0)
+            c2.apply_vs_military(module, player_idx=1)
+            return launch_now
+
+        # Apply effects
+        for card, player_idx in [(c1, 0), (c2, 1)]:
+            if card is None:
+                continue
+            if isinstance(card, StandardCard):
+                card.apply(module, player_idx)
+            elif isinstance(card, SpecialCard):
+                card.resolve(module, player_idx, game=self)
+
+        return launch_now
+
+

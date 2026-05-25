@@ -1,7 +1,8 @@
 import random
 from abc import ABC, abstractmethod
 
-from card import Card, CardType
+from card import (Card, Scientists, Colonists, Military,
+                  Genius, Sabotage, LaunchNow, DoubleAgent)
 from game import PlayerView
 
 
@@ -10,25 +11,12 @@ from game import PlayerView
 # Launch Now is last in both orderings — it is never deployed unless no other
 # card is available (with hand_size=8 and num_modules=6 that never happens).
 COOPERATION_ORDER = [
-    CardType.SCIENTISTS,
-    CardType.GENIUS,
-    CardType.COLONISTS,
-    CardType.DOUBLE_AGENT,
-    CardType.MILITARY,
-    CardType.SABOTAGE,
-    CardType.LAUNCH_NOW,
+    Scientists, Genius, Colonists, DoubleAgent, Military, Sabotage, LaunchNow
 ]
 
 AGGRESSION_ORDER = [
-    CardType.MILITARY,
-    CardType.COLONISTS,
-    CardType.GENIUS,
-    CardType.DOUBLE_AGENT,
-    CardType.SCIENTISTS,
-    CardType.SABOTAGE,
-    CardType.LAUNCH_NOW,
+    Military, Colonists, Genius, DoubleAgent, Scientists, Sabotage, LaunchNow
 ]
-
 
 class Strategy(ABC):
     """
@@ -74,9 +62,8 @@ class RandomStrategy(Strategy):
 
     def choose_deployment(self, view: PlayerView) -> dict:
         n = view.config.num_modules
-        regular = [c for c in view.hand if c.card_type != CardType.LAUNCH_NOW]
-        holdout  = [c for c in view.hand if c.card_type == CardType.LAUNCH_NOW]
-
+        regular = [c for c in view.hand if not isinstance(c, LaunchNow)]
+        holdout  = [c for c in view.hand if isinstance(c, LaunchNow)]
         pool = regular if len(regular) >= n else regular + holdout
         self._rng.shuffle(pool)
 
@@ -100,8 +87,8 @@ class CooperativeStrategy(Strategy):
             key=lambda i: (view.modules[i].dev_level, i),
         )
 
-        type_rank = {ct: rank for rank, ct in enumerate(COOPERATION_ORDER)}
-        hand_sorted = sorted(view.hand, key=lambda c: type_rank.get(c.card_type, 99))
+        type_rank = {cls: rank for rank, cls in enumerate(COOPERATION_ORDER)}
+        hand_sorted = sorted(view.hand, key=lambda c: type_rank.get(type(c), 99))
 
         return _greedy_assign(module_order, hand_sorted)
 
@@ -125,8 +112,8 @@ class AggressiveStrategy(Strategy):
             ),
         )
 
-        type_rank = {ct: rank for rank, ct in enumerate(AGGRESSION_ORDER)}
-        hand_sorted = sorted(view.hand, key=lambda c: type_rank.get(c.card_type, 99))
+        type_rank = {cls: rank for rank, cls in enumerate(AGGRESSION_ORDER)}
+        hand_sorted = sorted(view.hand, key=lambda c: type_rank.get(type(c), 99))
 
         return _greedy_assign(module_order, hand_sorted)
 
@@ -146,31 +133,28 @@ class BalancedStrategy(Strategy):
         rounds_left = max(1, view.config.num_rounds - view.round_num)
 
         def pair_score(mod_idx: int, card: Card) -> float:
-            # Launch Now is held back unless truly forced — give it a floor
-            # far below any real deployment so it's always last resort.
-            if card.card_type == CardType.LAUNCH_NOW:
+            if isinstance(card, LaunchNow):
                 return -999.0
 
             m = view.modules[mod_idx]
             dev_gap = max(0, view.config.module_ready_threshold - m.dev_level)
-            inf_gap = m.influence[opp] - m.influence[p]   # positive = we're behind
+            inf_gap = m.influence[opp] - m.influence[p]
 
             dev_value = {
-                CardType.SCIENTISTS:   1.0,
-                CardType.GENIUS:       1.0,
-            }.get(card.card_type, 0.0)
+                Scientists: 1.0,
+                Genius:     1.0,
+            }.get(type(card), 0.0)
 
             inf_value = {
-                CardType.MILITARY:     3.0,
-                CardType.COLONISTS:    2.0,
-                CardType.GENIUS:       2.0,
-                CardType.SCIENTISTS:   1.0,
-                CardType.DOUBLE_AGENT: 2.0,
-            }.get(card.card_type, 0.0)
+                Military:     3.0,
+                Colonists:    2.0,
+                Genius:       2.0,
+                Scientists:   1.0,
+                DoubleAgent:  2.0,
+            }.get(type(card), 0.0)
 
             dev_urgency = dev_gap / rounds_left
             return dev_urgency * dev_value + max(0.0, inf_gap) * 0.4 * inf_value
-
         # Greedy: repeatedly pick the (module, card) pair with the highest score
         hand = list(view.hand)
         remaining_mods = list(range(n))
