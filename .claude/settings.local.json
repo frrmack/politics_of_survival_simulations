@@ -3,7 +3,9 @@
     "allow": [
       "Bash(python main.py)",
       "Bash(python tune_rounds.py)",
-      "Bash(python diagnose.py)"
+      "Bash(python diagnose.py)",
+      "Bash(python -c \"import pygame; print\\(pygame.version.ver\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('gui/main.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")"
     ]
   }
 }

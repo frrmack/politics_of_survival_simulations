@@ -27,9 +27,9 @@ class GameConfig:
     # config_custom  = GameConfig(module_dev_level_init=lambda rng: rng.randint(1, 4))
 
     # Deck composition — main types (1:1:1 ratio by default)
-    scientists_count: int = 20
-    colonists_count: int = 20
-    military_count: int = 20
+    scientists_count: int = 10
+    colonists_count: int = 10
+    military_count: int = 10
 
     # Special cards (excluded from play; set > 0 to reintroduce individually)
     genius_count: int = 0
