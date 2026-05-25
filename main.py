@@ -23,13 +23,15 @@ def main():
     print("\n=== Politics of Survival — Baseline (5 modules, 5 rounds) ===\n")
 
     matchup(config, RandomStrategy(),      RandomStrategy())
+    matchup(config, CooperativeStrategy(), RandomStrategy())
     matchup(config, CooperativeStrategy(), CooperativeStrategy())
-    matchup(config, AggressiveStrategy(),  AggressiveStrategy())
+    matchup(config, CooperativeStrategy(), BalancedStrategy())
     matchup(config, CooperativeStrategy(), AggressiveStrategy())
-    matchup(config, AggressiveStrategy(),  CooperativeStrategy())
+    matchup(config, BalancedStrategy(),    RandomStrategy())
     matchup(config, BalancedStrategy(),    BalancedStrategy())
-    matchup(config, BalancedStrategy(),    CooperativeStrategy())
     matchup(config, BalancedStrategy(),    AggressiveStrategy())
+    matchup(config, AggressiveStrategy(),  RandomStrategy())
+    matchup(config, AggressiveStrategy(),  AggressiveStrategy())
 
 
 if __name__ == "__main__":
