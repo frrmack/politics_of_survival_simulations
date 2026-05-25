@@ -68,8 +68,8 @@ class Military(StandardCard):
 @dataclass(frozen=True)
 class Genius(SpecialCard):
     def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
-        module.add_influence(player_idx, 2)
-        module.adjust_dev(1)
+        module.add_influence(player_idx, 1)
+        module.adjust_dev(2)
 
 
 @dataclass(frozen=True)
