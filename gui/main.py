@@ -46,8 +46,8 @@ P1_COLOR     = (70,  165, 155)   # muted teal  — P1 identity color
 P2_COLOR     = (180,  75, 155)   # muted magenta — P2 identity color
 
 CARD_COLORS = {
-    Engineers:  (60,  100, 180),
-    Colonists:   (34,  120,  60),
+    Engineers:   (34,  120,  60),
+    Colonists:   (60,  100, 180),
     Military:    (180,  40,  40),
     Genius:      (180, 150,  20),
     Sabotage:    (80,   80,  80),
