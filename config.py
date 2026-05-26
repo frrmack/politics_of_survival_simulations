@@ -15,9 +15,6 @@ class GameConfig:
     module_max_development: int = 6
     module_ready_threshold: int = 5     # min dev level of a module ready for launch
     #--
-    module_dev_level_init: Callable | list = field( 
-        default_factory=lambda: lambda rng: rng.randint(1, 6) 
-        )
     # This is how module dev levels are initialized at the start of each game; 
     # can be a RNG function or a list of ints for deterministic setups.
     # The default is randomly choosing between 1 and 6 for each module.
@@ -25,7 +22,11 @@ class GameConfig:
     # config_default = GameConfig()
     # config_list    = GameConfig(module_dev_level_init=[1, 2, 3, 4, 5])
     # config_custom  = GameConfig(module_dev_level_init=lambda rng: rng.randint(1, 4))
-
+    module_dev_level_init: Callable | list = field( 
+        default_factory=lambda: lambda rng: rng.randint(1, 6) 
+        )
+    # --
+    
     # Deck composition — main types (1:1:1 ratio by default)
     engineers_count: int = 10
     colonists_count: int = 10
