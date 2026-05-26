@@ -720,7 +720,7 @@ class App:
                 col = YELLOW
             else:
                 msg = f"Player {result.winner + 1} Wins!"
-                col = GREEN
+                col = P1_COLOR if result.winner == 0 else P2_COLOR
             draw_text(s, msg, self.f_h2, col, W//2, 90)
             draw_text(s,
                       f"Modules controlled: P1={result.modules_won[0]}  P2={result.modules_won[1]}",
