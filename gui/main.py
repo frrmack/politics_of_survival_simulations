@@ -56,7 +56,7 @@ CARD_COLORS = {
 }
 
 CARD_ABBR = {
-    Engineers:  "SCI",
+    Engineers:  "ENG",
     Colonists:   "COL",
     Military:    "MIL",
     Genius:      "GEN",
