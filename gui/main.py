@@ -66,9 +66,9 @@ CARD_ABBR = {
 }
 
 CARD_EFFECT = {
-    Engineers:  ("+1 inf", "+1 dev"),
-    Colonists:   ("+2 inf", ""),
-    Military:    ("+3 inf", "(-1 dev vs MIL)"),
+    Engineers:  ("+1 dev", ""),
+    Colonists:   ("+1 inf", ""),
+    Military:    ("+2 inf", "(-1 dev vs MIL)"),
     Genius:      ("+1 inf", "+2 dev"),
     Sabotage:    ("-1 dev", "on module"),
     LaunchNow:   ("end game", "now"),
@@ -392,7 +392,7 @@ class App:
 
         # Info blurb
         lines = [
-            "Engineers: +1 inf, +1 dev   |   Colonists: +2 inf   |   Military: +3 inf",
+            "Engineers: +0 inf, +1 dev   |   Colonists: +1 inf   |   Military: +2 inf",
             "Genius: +1 inf, +2 dev   |   Sabotage: -1 dev   |   DoubleAgent: steal effect",
             "Goal: control the most modules. Both lose if < modules_needed are READY.",
         ]

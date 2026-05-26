@@ -43,24 +43,23 @@ class SpecialCard(Card):
 @dataclass(frozen=True)
 class Engineers(StandardCard):
     def apply(self, module: 'Module', player_idx: int) -> None:
-        module.add_influence(player_idx, 1)
         module.adjust_dev(1)
 
 
 @dataclass(frozen=True)
 class Colonists(StandardCard):
     def apply(self, module: 'Module', player_idx: int) -> None:
-        module.add_influence(player_idx, 2)
+        module.add_influence(player_idx, 1)
 
 
 @dataclass(frozen=True)
 class Military(StandardCard):
     def apply(self, module: 'Module', player_idx: int) -> None:
-        module.add_influence(player_idx, 3)
+        module.add_influence(player_idx, 2)
 
     def apply_vs_military(self, module: 'Module', player_idx: int) -> None:
         """Special case when both players play Military."""
-        module.add_influence(player_idx, 3)
+        module.add_influence(player_idx, 2)
         module.adjust_dev(-1)  # each Military contributes -1, total -2
 
 

@@ -146,10 +146,10 @@ class BalancedStrategy(Strategy):
             }.get(type(card), 0.0)
 
             inf_value = {
-                Military:     3.0,
-                Colonists:    2.0,
+                Military:     2.0,
+                Colonists:    1.0,
                 Genius:       2.0,
-                Engineers:   1.0,
+                Engineers:    0.0,
                 DoubleAgent:  2.0,
             }.get(type(card), 0.0)
 
