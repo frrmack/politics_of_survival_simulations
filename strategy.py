@@ -1,7 +1,7 @@
 import random
 from abc import ABC, abstractmethod
 
-from card import (Card, Scientists, Colonists, Military,
+from card import (Card, Engineers, Colonists, Military,
                   Genius, Sabotage, LaunchNow, DoubleAgent)
 from game import PlayerView
 
@@ -11,11 +11,11 @@ from game import PlayerView
 # Launch Now is last in both orderings — it is never deployed unless no other
 # card is available (with hand_size=8 and num_modules=6 that never happens).
 COOPERATION_ORDER = [
-    Scientists, Genius, Colonists, DoubleAgent, Military, Sabotage, LaunchNow
+    Engineers, Genius, Colonists, DoubleAgent, Military, Sabotage, LaunchNow
 ]
 
 AGGRESSION_ORDER = [
-    Military, Colonists, Genius, DoubleAgent, Scientists, Sabotage, LaunchNow
+    Military, Colonists, Genius, DoubleAgent, Engineers, Sabotage, LaunchNow
 ]
 
 class Strategy(ABC):
@@ -74,7 +74,7 @@ class RandomStrategy(Strategy):
 
 class CooperativeStrategy(Strategy):
     """
-    Prefers Scientists and Genius; sends them to the least-developed modules.
+    Prefers Engineers and Genius; sends them to the least-developed modules.
     Prioritizes ship completion over personal influence gain.
     """
 
@@ -121,7 +121,7 @@ class AggressiveStrategy(Strategy):
 class BalancedStrategy(Strategy):
     """
     Tries to match each card to the module where it does the most good:
-    - Scientists/Genius to modules that urgently need development
+    - Engineers/Genius to modules that urgently need development
     - Military/Colonists to modules where we're behind in influence
     Uses greedy (module, card) pair scoring so the 2 held-back cards
     are whichever pair produces the lowest marginal value.
@@ -141,7 +141,7 @@ class BalancedStrategy(Strategy):
             inf_gap = m.influence[opp] - m.influence[p]
 
             dev_value = {
-                Scientists: 1.0,
+                Engineers: 1.0,
                 Genius:     1.0,
             }.get(type(card), 0.0)
 
@@ -149,7 +149,7 @@ class BalancedStrategy(Strategy):
                 Military:     3.0,
                 Colonists:    2.0,
                 Genius:       2.0,
-                Scientists:   1.0,
+                Engineers:   1.0,
                 DoubleAgent:  2.0,
             }.get(type(card), 0.0)
 

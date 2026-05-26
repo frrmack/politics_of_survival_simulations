@@ -23,7 +23,7 @@ from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
 # ---------------------------------------------------------------------------
 
 _ABBR = {
-    'Scientists': 'Sci', 'Colonists': 'Col', 'Military': 'Mil',
+    'Engineers': 'Eng', 'Colonists': 'Col', 'Military': 'Mil',
     'Genius': 'Gen', 'Sabotage': 'Sab', 'LaunchNow': 'LNC', 'DoubleAgent': 'DA',
 }
 

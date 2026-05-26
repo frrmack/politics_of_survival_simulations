@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from card import (Card, StandardCard, SpecialCard,
-                  Scientists, Colonists, Military,
+                  Engineers, Colonists, Military,
                   Genius, Sabotage, LaunchNow, DoubleAgent)
 from module import Module
 from config import GameConfig
@@ -17,7 +17,7 @@ class Deck:
     def __init__(self, config: GameConfig, rng: random.Random | None = None):
         self._rng = rng or random.Random()
         cards: list = []
-        cards.extend([Scientists()]   * config.scientists_count)
+        cards.extend([Engineers()]    * config.engineers_count)
         cards.extend([Colonists()]    * config.colonists_count)
         cards.extend([Military()]     * config.military_count)
         cards.extend([Genius()]       * config.genius_count)

@@ -41,7 +41,7 @@ class SpecialCard(Card):
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class Scientists(StandardCard):
+class Engineers(StandardCard):
     def apply(self, module: 'Module', player_idx: int) -> None:
         module.add_influence(player_idx, 1)
         module.adjust_dev(1)

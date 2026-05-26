@@ -27,7 +27,7 @@ class GameConfig:
     # config_custom  = GameConfig(module_dev_level_init=lambda rng: rng.randint(1, 4))
 
     # Deck composition — main types (1:1:1 ratio by default)
-    scientists_count: int = 10
+    engineers_count: int = 10
     colonists_count: int = 10
     military_count: int = 10
 
@@ -41,7 +41,7 @@ class GameConfig:
     @property
     def deck_size(self) -> int:
         return (
-            self.scientists_count
+            self.engineers_count
             + self.colonists_count
             + self.military_count
             + self.genius_count

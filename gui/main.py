@@ -15,7 +15,7 @@ if _PARENT not in sys.path:
 import pygame
 
 from config import GameConfig
-from card import (Card, Scientists, Colonists, Military,
+from card import (Card, Engineers, Colonists, Military,
                   Genius, Sabotage, LaunchNow, DoubleAgent)
 from module import Module
 from game import Game, PlayerView, RoundRecord
@@ -46,7 +46,7 @@ P1_COLOR     = (70,  165, 155)   # muted teal  — P1 identity color
 P2_COLOR     = (180,  75, 155)   # muted magenta — P2 identity color
 
 CARD_COLORS = {
-    Scientists:  (60,  100, 180),
+    Engineers:  (60,  100, 180),
     Colonists:   (34,  120,  60),
     Military:    (180,  40,  40),
     Genius:      (180, 150,  20),
@@ -56,7 +56,7 @@ CARD_COLORS = {
 }
 
 CARD_ABBR = {
-    Scientists:  "SCI",
+    Engineers:  "SCI",
     Colonists:   "COL",
     Military:    "MIL",
     Genius:      "GEN",
@@ -66,7 +66,7 @@ CARD_ABBR = {
 }
 
 CARD_EFFECT = {
-    Scientists:  ("+1 inf", "+1 dev"),
+    Engineers:  ("+1 inf", "+1 dev"),
     Colonists:   ("+2 inf", ""),
     Military:    ("+3 inf", "(-1 dev vs MIL)"),
     Genius:      ("+1 inf", "+2 dev"),
@@ -392,7 +392,7 @@ class App:
 
         # Info blurb
         lines = [
-            "Scientists: +1 inf, +1 dev   |   Colonists: +2 inf   |   Military: +3 inf",
+            "Engineers: +1 inf, +1 dev   |   Colonists: +2 inf   |   Military: +3 inf",
             "Genius: +1 inf, +2 dev   |   Sabotage: -1 dev   |   DoubleAgent: steal effect",
             "Goal: control the most modules. Both lose if < modules_needed are READY.",
         ]
