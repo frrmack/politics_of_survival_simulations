@@ -4,7 +4,7 @@ from typing import Optional
 
 from card import (Card, StandardCard, SpecialCard,
                   Engineers, Colonists, Military,
-                  Overtime, Genius, Propaganda)
+                  Embargo, Overtime, Genius, Propaganda)
 from module import Module
 from config import GameConfig
 
@@ -20,6 +20,7 @@ class Deck:
         cards.extend([Engineers()]  * config.engineers_count)
         cards.extend([Colonists()]  * config.colonists_count)
         cards.extend([Military()]   * config.military_count)
+        cards.extend([Embargo()]    * config.embargo_count)
         cards.extend([Overtime()]   * config.overtime_count)
         cards.extend([Genius()]     * config.genius_count)
         cards.extend([Propaganda()] * config.propaganda_count)
@@ -224,6 +225,10 @@ class Game:
 
     # resolution logic
     def resolve_module(self, module: Module, card_p1: Card, card_p2: Card) -> None:
+        # Embargo: either player playing it freezes the module for this round
+        if isinstance(card_p1, Embargo) or isinstance(card_p2, Embargo):
+            return
+
         # Military vs Military special case
         if isinstance(card_p1, Military) and isinstance(card_p2, Military):
             card_p1.apply_vs_military(module, player_idx=0)

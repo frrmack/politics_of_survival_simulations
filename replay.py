@@ -13,7 +13,7 @@ import random
 
 from config import GameConfig
 from game import Game, PlayerView, RoundRecord
-from card import Military
+from card import Military, Embargo
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
                       RandomStrategy, BalancedStrategy)
 
@@ -24,7 +24,7 @@ from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
 
 _ABBR = {
     'Engineers': 'Eng', 'Colonists': 'Col', 'Military': 'Mil',
-    'Overtime': 'Ovt', 'Genius': 'Gen', 'Propaganda': 'Pro',
+    'Embargo': 'Emb', 'Overtime': 'Ovt', 'Genius': 'Gen', 'Propaganda': 'Pro',
 }
 
 def _abbr(card) -> str:
@@ -35,7 +35,7 @@ def _hand_summary(hand) -> str:
     for c in hand:
         a = _abbr(c)
         counts[a] = counts.get(a, 0) + 1
-    order = ['Eng', 'Col', 'Mil', 'Ovt', 'Gen', 'Pro']
+    order = ['Eng', 'Col', 'Mil', 'Emb', 'Ovt', 'Gen', 'Pro']
     return '  '.join(f"{a}×{counts[a]}" for a in order if a in counts)
 
 
@@ -108,7 +108,9 @@ class ReplayGame(Game):
             if not effects: effects.append("no effect")
 
             notes = []
-            if isinstance(c1_raw, Military) and isinstance(c2_raw, Military):
+            if isinstance(c1_raw, Embargo) or isinstance(c2_raw, Embargo):
+                notes.append("Embargo — module frozen")
+            elif isinstance(c1_raw, Military) and isinstance(c2_raw, Military):
                 notes.append("MvM")
             note_str = f"  [{', '.join(notes)}]" if notes else ""
 

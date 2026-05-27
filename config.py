@@ -32,7 +32,8 @@ class GameConfig:
     colonists_count: int = 10
     military_count: int = 10
 
-    # Special cards (excluded from play; set > 0 to reintroduce individually)
+    # Special cards (1 each by default)
+    embargo_count: int = 1
     overtime_count: int = 1
     genius_count: int = 1
     propaganda_count: int = 1
@@ -44,6 +45,7 @@ class GameConfig:
             self.engineers_count
             + self.colonists_count
             + self.military_count
+            + self.embargo_count
             + self.overtime_count
             + self.genius_count
             + self.propaganda_count

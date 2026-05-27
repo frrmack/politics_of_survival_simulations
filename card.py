@@ -68,6 +68,13 @@ class Military(StandardCard):
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
+class Embargo(SpecialCard):
+    def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
+        # Resolution is short-circuited in game.resolve_module before this is reached
+        pass
+
+
+@dataclass(frozen=True)
 class Overtime(SpecialCard):
     def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
         module.adjust_dev(2)

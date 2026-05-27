@@ -15,7 +15,7 @@ if _PARENT not in sys.path:
 import pygame
 
 from config import GameConfig
-from card import (Card, Engineers, Colonists, Military, Overtime, Genius, Propaganda)
+from card import (Card, Engineers, Colonists, Military, Embargo, Overtime, Genius, Propaganda)
 from module import Module
 from game import Game, PlayerView, RoundRecord
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
@@ -48,6 +48,7 @@ CARD_COLORS = {
     Engineers:  (34,  120,  60),
     Colonists:  (60,  100, 180),
     Military:   (180,  40,  40),
+    Embargo:    (90,  100, 120),
     Overtime:   (20,  160,  90),
     Genius:     (180, 150,  20),
     Propaganda: (140,  50, 180),
@@ -57,6 +58,7 @@ CARD_ABBR = {
     Engineers:  "ENG",
     Colonists:  "COL",
     Military:   "MIL",
+    Embargo:    "EMB",
     Overtime:   "OVT",
     Genius:     "GEN",
     Propaganda: "PRO",
@@ -66,6 +68,7 @@ CARD_EFFECT = {
     Engineers:  ("+1 dev", ""),
     Colonists:  ("+1 inf", ""),
     Military:   ("+2 inf", "(-1 dev vs MIL)"),
+    Embargo:    ("freeze module", "rival irrelevant"),
     Overtime:   ("+2 dev", ""),
     Genius:     ("+1 inf", "+1 dev"),
     Propaganda: ("+2 inf", ""),
