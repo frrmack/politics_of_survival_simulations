@@ -460,7 +460,8 @@ class App:
         self.modules_before = None
         self.consequences_data = None
         self.current_deployments = None
-        self.pending_relocation_choices = []   # list of (player_idx, mod_idx, neighbors)
+        self.pending_all_relocation_choices = []  # (player_idx, mod_idx, neighbors), all players, left-to-right
+        self.collected_relocation_targets = {}    # {(mod_idx, player_idx): target_idx}
         self.current_relocation_idx = 0
 
     # ------------------------------------------------------------------
@@ -518,41 +519,49 @@ class App:
         self._run_round()
 
     def _run_round(self):
-        """Collect all deployments, then branch to relocation choices or straight to effects."""
+        """Collect all deployments, then work through relocation choices left-to-right."""
         g = self.game
         g.round_num += 1
 
         self.current_deployments = g._collect_deployments()
+        self.collected_relocation_targets = {}
 
-        # Build list of relocation choices needed from human players only.
-        # (AI relocation choices are handled automatically in _collect_choices.)
-        self.pending_relocation_choices = []
+        # Build unified ordered list of all relocation choices (both players, left-to-right).
+        # Single-neighbor modules are auto-selected immediately; all others go in the queue.
+        self.pending_all_relocation_choices = []
         for mod_idx in range(g.config.num_modules):
-            for pi in sorted(self.human_players):
-                card = self.current_deployments[pi][mod_idx]
+            for player_idx in range(2):
+                card = self.current_deployments[player_idx][mod_idx]
                 if isinstance(card, Relocation):
                     neighbors = g._get_neighbors(mod_idx)
-                    if len(neighbors) > 1:
-                        self.pending_relocation_choices.append((pi, mod_idx, neighbors))
+                    if len(neighbors) == 1:
+                        self.collected_relocation_targets[(mod_idx, player_idx)] = neighbors[0]
+                    else:
+                        self.pending_all_relocation_choices.append((player_idx, mod_idx, neighbors))
 
         self.current_relocation_idx = 0
-        if self.pending_relocation_choices:
-            self.state = CHOOSE_RELOCATION
-        else:
-            self._finish_round()
+        self._advance_relocation_choices()
 
     def _advance_relocation_choices(self):
-        """Move to the next pending relocation choice, or finish the round."""
-        self.current_relocation_idx += 1
-        if self.current_relocation_idx < len(self.pending_relocation_choices):
-            self.state = CHOOSE_RELOCATION
-        else:
-            self._finish_round()
+        """Process the next choice: resolve AI immediately, pause for human."""
+        g = self.game
+        while self.current_relocation_idx < len(self.pending_all_relocation_choices):
+            player_idx, mod_idx, neighbors = self.pending_all_relocation_choices[self.current_relocation_idx]
+            if player_idx in self.human_players:
+                self.state = CHOOSE_RELOCATION
+                return
+            # AI: resolve immediately and keep going
+            view = g._make_view(player_idx)
+            target = g.strategies[player_idx].choose_relocation_target(view, mod_idx, neighbors)
+            self.collected_relocation_targets[(mod_idx, player_idx)] = target
+            self.current_relocation_idx += 1
+        self._finish_round()
 
     def _finish_round(self):
-        """Apply all effects, snapshot results, and transition to CONSEQUENCES."""
+        """Apply pre-collected choices, snapshot results, and transition to CONSEQUENCES."""
         g = self.game
-        g._play_round_from_deployments(self.current_deployments)
+        g._apply_effects(self.current_deployments, self.collected_relocation_targets)
+        g._discard_and_refill(self.current_deployments)
         after = snapshot_modules(g.modules)
         record = g.history[-1]
         self.consequences_data = (self.modules_before, after, record)
@@ -713,7 +722,7 @@ class App:
         s = self.screen
         s.fill(BG)
         g = self.game
-        pi, mod_idx, neighbors = self.pending_relocation_choices[self.current_relocation_idx]
+        pi, mod_idx, neighbors = self.pending_all_relocation_choices[self.current_relocation_idx]
         p_color = P1_COLOR if pi == 0 else P2_COLOR
 
         draw_multicolor_text(s,
@@ -727,9 +736,15 @@ class App:
                   f"Where should your influence move?",
                   self.f_body, GREY, W//2, 74)
 
-        self._draw_modules(s, top=160, interactive=False,
+        played_cards = {
+            mi: (self.current_deployments[0][mi], self.current_deployments[1][mi])
+            for mi in range(g.config.num_modules)
+        }
+        self._draw_modules(s, top=130, interactive=False,
+                           played_cards=played_cards,
                            relocation_source=mod_idx,
-                           relocation_targets=neighbors)
+                           relocation_targets=neighbors,
+                           played_relocation_targets=self.collected_relocation_targets)
 
         draw_text(s, "Click a highlighted module to relocate your influence there.",
                   self.f_body, GOLD, W//2, H - 50)
@@ -739,15 +754,12 @@ class App:
             return
         if not hasattr(self, '_module_slots'):
             return
-        _, mod_idx, neighbors = self.pending_relocation_choices[self.current_relocation_idx]
-        pi = self.pending_relocation_choices[self.current_relocation_idx][0]
+        player_idx, mod_idx, neighbors = self.pending_all_relocation_choices[self.current_relocation_idx]
         for target_idx in neighbors:
             if target_idx in self._module_slots:
                 if self._module_slots[target_idx].collidepoint(event.pos):
-                    for p, hs in self.human_strategies:
-                        if p == pi:
-                            hs.set_relocation_target(mod_idx, target_idx)
-                            break
+                    self.collected_relocation_targets[(mod_idx, player_idx)] = target_idx
+                    self.current_relocation_idx += 1
                     self._advance_relocation_choices()
                     return
 
@@ -765,7 +777,8 @@ class App:
         draw_text(s, f"Round {g.round_num} Consequences", self.f_title, WHITE, W//2, 38)
 
         self._draw_modules(s, top=188, interactive=False,
-                           played_cards=record.deployments, before_state=before)
+                           played_cards=record.deployments, before_state=before,
+                           played_relocation_targets=record.relocation_targets)
 
         # Button
         last_round = g.round_num >= g.config.num_rounds or g.game_over
@@ -835,7 +848,8 @@ class App:
                       show_assignments=False, deploy_player=None,
                       small_die=False, played_cards=None,
                       before_state=None,
-                      relocation_source=None, relocation_targets=None):
+                      relocation_source=None, relocation_targets=None,
+                      played_relocation_targets=None):
         g = self.game
         n = g.config.num_modules
         die_sz   = 60 if small_die else 80
@@ -921,10 +935,26 @@ class App:
             # Played cards (consequences view): P2 above, P1 below
             if played_cards and mi in played_cards:
                 c1, c2 = played_cards[mi]
+                rlo_font = make_font(11, bold=True)
+                rlo_color = CARD_COLORS[Relocation]
                 if c2:
-                    draw_mini_card(surf, c2, cx, top + MINI_H // 2)
+                    p2_cy = top + MINI_H // 2
+                    draw_mini_card(surf, c2, cx, p2_cy)
+                    if played_relocation_targets and isinstance(c2, Relocation):
+                        t = played_relocation_targets.get((mi, 1))
+                        if t is not None:
+                            arrow = f"→M{t+1}" if t > mi else f"←M{t+1}"
+                            draw_text(surf, arrow, rlo_font, rlo_color,
+                                      cx, p2_cy - MINI_H // 2 - 10)
                 if c1:
-                    draw_mini_card(surf, c1, cx, box_top + slot_h + MINI_GAP + MINI_H // 2)
+                    p1_cy = box_top + slot_h + MINI_GAP + MINI_H // 2
+                    draw_mini_card(surf, c1, cx, p1_cy)
+                    if played_relocation_targets and isinstance(c1, Relocation):
+                        t = played_relocation_targets.get((mi, 0))
+                        if t is not None:
+                            arrow = f"→M{t+1}" if t > mi else f"←M{t+1}"
+                            draw_text(surf, arrow, rlo_font, rlo_color,
+                                      cx, p1_cy + MINI_H // 2 + 12)
 
     # ------------------------------------------------------------------
     # Main loop

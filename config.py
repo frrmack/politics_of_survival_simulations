@@ -34,7 +34,7 @@ class GameConfig:
 
     # Special cards (1 each by default)
     embargo_count: int = 1
-    relocation_count: int = 8
+    relocation_count: int = 1
     overtime_count: int = 1
     genius_count: int = 1
     propaganda_count: int = 1
