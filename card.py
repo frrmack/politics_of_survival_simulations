@@ -75,6 +75,15 @@ class Embargo(SpecialCard):
 
 
 @dataclass(frozen=True)
+class Relocation(SpecialCard):
+    def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
+        target_idx = game._relocation_targets.get((module.index, player_idx))
+        if target_idx is not None:
+            module.add_influence(player_idx, -1)
+            game.modules[target_idx].add_influence(player_idx, 1)
+
+
+@dataclass(frozen=True)
 class Overtime(SpecialCard):
     def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
         module.adjust_dev(2)

@@ -12,8 +12,8 @@ import argparse
 import random
 
 from config import GameConfig
-from game import Game, PlayerView, RoundRecord
-from card import Military, Embargo
+from game import Game, RoundRecord
+from card import Military, Embargo, Relocation
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
                       RandomStrategy, BalancedStrategy)
 
@@ -24,7 +24,7 @@ from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
 
 _ABBR = {
     'Engineers': 'Eng', 'Colonists': 'Col', 'Military': 'Mil',
-    'Embargo': 'Emb', 'Overtime': 'Ovt', 'Genius': 'Gen', 'Propaganda': 'Pro',
+    'Embargo': 'Emb', 'Relocation': 'Rlo', 'Overtime': 'Ovt', 'Genius': 'Gen', 'Propaganda': 'Pro',
 }
 
 def _abbr(card) -> str:
@@ -35,7 +35,7 @@ def _hand_summary(hand) -> str:
     for c in hand:
         a = _abbr(c)
         counts[a] = counts.get(a, 0) + 1
-    order = ['Eng', 'Col', 'Mil', 'Emb', 'Ovt', 'Gen', 'Pro']
+    order = ['Eng', 'Col', 'Mil', 'Emb', 'Rlo', 'Ovt', 'Gen', 'Pro']
     return '  '.join(f"{a}×{counts[a]}" for a in order if a in counts)
 
 
@@ -68,72 +68,58 @@ class ReplayGame(Game):
         for pi in range(2):
             print(f"    P{pi+1}: {_hand_summary(self.hands[pi])}")
 
-        # Deployment phase
-        record = RoundRecord(round_num=rn)
-        deployments = []
-        for player_idx, strategy in enumerate(self.strategies):
-            view = PlayerView(
-                player_idx=player_idx,
-                hand=self.hands[player_idx],
-                modules=self.modules,
-                round_num=rn,
-                config=self.config,
-                history=self.history,
-            )
-            dep = strategy.choose_deployment(view)
-            self._validate_deployment(player_idx, dep)
-            deployments.append(dep)
+        # Deployment and choice collection
+        deployments = self._collect_deployments()
+        relocation_targets = self._collect_choices(deployments)
 
         # Resolution with per-module tracing
+        self._relocation_targets = relocation_targets
+        record = RoundRecord(round_num=rn, relocation_targets=relocation_targets)
         print("\n  Resolution:")
         for mod_idx, module in enumerate(self.modules):
-            c1_raw = deployments[0][mod_idx]
-            c2_raw = deployments[1][mod_idx]
-            record.deployments[mod_idx] = (c1_raw, c2_raw)
+            c1 = deployments[0][mod_idx]
+            c2 = deployments[1][mod_idx]
+            record.deployments[mod_idx] = (c1, c2)
 
             dev_before = module.dev_level
             inf_before = list(module.influence)
 
-            self.resolve_module(module, c1_raw, c2_raw)
+            self.resolve_module(module, c1, c2)
 
             d1 = module.influence[0] - inf_before[0]
             d2 = module.influence[1] - inf_before[1]
             dd = module.dev_level - dev_before
 
             effects = []
-            if d1:  effects.append(f"P1: +{d1}")
-            if d2:  effects.append(f"P2: +{d2}")
+            if d1:  effects.append(f"P1: {'+' if d1 > 0 else ''}{d1}")
+            if d2:  effects.append(f"P2: {'+' if d2 > 0 else ''}{d2}")
             if dd > 0: effects.append(f"dev +{dd}")
             if dd < 0: effects.append(f"dev {dd}")
             if not effects: effects.append("no effect")
 
             notes = []
-            if isinstance(c1_raw, Embargo) or isinstance(c2_raw, Embargo):
+            if isinstance(c1, Embargo) or isinstance(c2, Embargo):
                 notes.append("Embargo — module frozen")
-            elif isinstance(c1_raw, Military) and isinstance(c2_raw, Military):
+            elif isinstance(c1, Military) and isinstance(c2, Military):
                 notes.append("MvM")
+            else:
+                rlo_parts = []
+                for pi, c in [(0, c1), (1, c2)]:
+                    if isinstance(c, Relocation):
+                        t = relocation_targets.get((mod_idx, pi))
+                        if t is not None:
+                            rlo_parts.append(f"P{pi+1}→M{t+1}")
+                if rlo_parts:
+                    notes.append(f"Rlo: {', '.join(rlo_parts)}")
             note_str = f"  [{', '.join(notes)}]" if notes else ""
 
             status = "READY" if module.is_ready else f"need +{module.READY_THRESHOLD - module.dev_level}"
-            print(f"    M{mod_idx+1}  P1: {_abbr(c1_raw):<3}  P2: {_abbr(c2_raw):<3}"
+            print(f"    M{mod_idx+1}  P1: {_abbr(c1):<3}  P2: {_abbr(c2):<3}"
                   f"  →  {'  '.join(effects):<26}"
                   f"   [{status:>8}   P1= {module.influence[0]:>2}  P2= {module.influence[1]:>2}]   {note_str}")
 
         self.history.append(record)
-
-        # Discard played cards
-        for player_idx in range(2):
-            played = list(deployments[player_idx].values())
-            for card in played:
-                self.hands[player_idx].remove(card)
-            self.deck.discard(played)
-
-        # Refill hands (randomised order, same as Game._play_round)
-        refill_order = [0, 1]
-        self._rng.shuffle(refill_order)
-        for player_idx in refill_order:
-            while len(self.hands[player_idx]) < self.config.hand_size:
-                self.hands[player_idx].append(self.deck.draw())
+        self._discard_and_refill(deployments)
 
         # Hands after redraw
         print("\n  Hands after redraw:")

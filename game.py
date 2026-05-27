@@ -4,7 +4,7 @@ from typing import Optional
 
 from card import (Card, StandardCard, SpecialCard,
                   Engineers, Colonists, Military,
-                  Embargo, Overtime, Genius, Propaganda)
+                  Embargo, Relocation, Overtime, Genius, Propaganda)
 from module import Module
 from config import GameConfig
 
@@ -17,13 +17,14 @@ class Deck:
     def __init__(self, config: GameConfig, rng: random.Random | None = None):
         self._rng = rng or random.Random()
         cards: list = []
-        cards.extend([Engineers()]  * config.engineers_count)
-        cards.extend([Colonists()]  * config.colonists_count)
-        cards.extend([Military()]   * config.military_count)
-        cards.extend([Embargo()]    * config.embargo_count)
-        cards.extend([Overtime()]   * config.overtime_count)
-        cards.extend([Genius()]     * config.genius_count)
-        cards.extend([Propaganda()] * config.propaganda_count)
+        cards.extend([Engineers()]   * config.engineers_count)
+        cards.extend([Colonists()]   * config.colonists_count)
+        cards.extend([Military()]    * config.military_count)
+        cards.extend([Embargo()]     * config.embargo_count)
+        cards.extend([Relocation()]  * config.relocation_count)
+        cards.extend([Overtime()]    * config.overtime_count)
+        cards.extend([Genius()]      * config.genius_count)
+        cards.extend([Propaganda()]  * config.propaganda_count)
         self._rng.shuffle(cards)
         self._draw: list = cards
         self._discard: list = []
@@ -43,7 +44,6 @@ class Deck:
         self._discard.extend(cards)
 
 
-
 # ---------------------------------------------------------------------------
 # Observable state passed to strategies
 # ---------------------------------------------------------------------------
@@ -53,6 +53,7 @@ class RoundRecord:
     """What happened in one round, fully revealed after the Consequences phase."""
     round_num: int
     deployments: dict = field(default_factory=dict)
+    relocation_targets: dict = field(default_factory=dict)  # (mod_idx, player_idx) -> target_idx
 
 
 @dataclass
@@ -118,6 +119,7 @@ class Game:
         self.round_num = 0
         self.game_over = False
         self.history: list = []
+        self._relocation_targets: dict = {}
 
     def play(self) -> GameResult:
         for round_num in range(1, self.config.num_rounds + 1):
@@ -127,34 +129,70 @@ class Game:
                 break
         return self._build_result()
 
-    def _play_round(self) -> None:
-        record = RoundRecord(round_num=self.round_num)
+    # ------------------------------------------------------------------
+    # Round phases — can be called individually by the GUI
+    # ------------------------------------------------------------------
 
-        # Deployment phase: each strategy picks one card per module
+    def _play_round(self) -> None:
+        """Headless entry point: runs all phases in sequence."""
+        deployments = self._collect_deployments()
+        self._play_round_from_deployments(deployments)
+
+    def _collect_deployments(self) -> list[dict]:
+        """Ask each strategy for its deployment. Returns list of 2 deployment dicts."""
         deployments = []
         for player_idx, strategy in enumerate(self.strategies):
-            view = PlayerView(
-                player_idx=player_idx,
-                hand=self.hands[player_idx],
-                modules=self.modules,
-                round_num=self.round_num,
-                config=self.config,
-                history=self.history,
-            )
+            view = self._make_view(player_idx)
             deployment = strategy.choose_deployment(view)
             self._validate_deployment(player_idx, deployment)
             deployments.append(deployment)
+        return deployments
 
-        # Consequences phase: reveal and resolve
+    def _play_round_from_deployments(self, deployments: list[dict]) -> None:
+        """Run choices, effects, and refill given finalized deployments.
+        Called by _play_round() and by the GUI after collecting human choices.
+        """
+        relocation_targets = self._collect_choices(deployments)
+        self._apply_effects(deployments, relocation_targets)
+        self._discard_and_refill(deployments)
+
+    def _collect_choices(self, deployments: list[dict]) -> dict:
+        """Collect player choices for special cards that need them.
+        Returns relocation_targets: {(mod_idx, player_idx): target_idx}.
+        Extended in future turns for Salvage and Espionage.
+        """
+        relocation_targets = {}
+        for mod_idx in range(self.config.num_modules):
+            for player_idx in range(2):
+                card = deployments[player_idx][mod_idx]
+                if isinstance(card, Relocation):
+                    neighbors = self._get_neighbors(mod_idx)
+                    if len(neighbors) == 1:
+                        target = neighbors[0]
+                    else:
+                        view = self._make_view(player_idx)
+                        target = self.strategies[player_idx].choose_relocation_target(
+                            view, mod_idx, neighbors
+                        )
+                    relocation_targets[(mod_idx, player_idx)] = target
+        return relocation_targets
+
+    def _apply_effects(self, deployments: list[dict], relocation_targets: dict) -> None:
+        """Resolve all modules and record the round."""
+        self._relocation_targets = relocation_targets
+        record = RoundRecord(
+            round_num=self.round_num,
+            relocation_targets=relocation_targets,
+        )
         for mod_idx, module in enumerate(self.modules):
             c1 = deployments[0][mod_idx]
             c2 = deployments[1][mod_idx]
             record.deployments[mod_idx] = (c1, c2)
             self.resolve_module(module, c1, c2)
-
         self.history.append(record)
 
-        # Discard played cards, refill hands to hand_size
+    def _discard_and_refill(self, deployments: list[dict]) -> None:
+        """Discard played cards and refill hands to hand_size."""
         for player_idx in range(2):
             played = list(deployments[player_idx].values())
             for card in played:
@@ -166,6 +204,28 @@ class Game:
         for player_idx in refill_order:
             while len(self.hands[player_idx]) < self.config.hand_size:
                 self.hands[player_idx].append(self.deck.draw())
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _make_view(self, player_idx: int) -> PlayerView:
+        return PlayerView(
+            player_idx=player_idx,
+            hand=self.hands[player_idx],
+            modules=self.modules,
+            round_num=self.round_num,
+            config=self.config,
+            history=self.history,
+        )
+
+    def _get_neighbors(self, module_idx: int) -> list[int]:
+        neighbors = []
+        if module_idx > 0:
+            neighbors.append(module_idx - 1)
+        if module_idx < self.config.num_modules - 1:
+            neighbors.append(module_idx + 1)
+        return neighbors
 
     def _validate_deployment(self, player_idx: int, deployment: dict) -> None:
         n = self.config.num_modules
@@ -223,9 +283,13 @@ class Game:
             history=list(self.history),
         )
 
-    # resolution logic
+    # ------------------------------------------------------------------
+    # Resolution
+    # ------------------------------------------------------------------
+
     def resolve_module(self, module: Module, card_p1: Card, card_p2: Card) -> None:
-        # Embargo: either player playing it freezes the module for this round
+        # Embargo: either player playing it freezes the module for this round.
+        # Checked on final cards (after any Espionage/Salvage substitution).
         if isinstance(card_p1, Embargo) or isinstance(card_p2, Embargo):
             return
 
@@ -241,5 +305,3 @@ class Game:
                 card.apply(module, player_idx)
             elif isinstance(card, SpecialCard):
                 card.resolve(module, player_idx, game=self)
-
-

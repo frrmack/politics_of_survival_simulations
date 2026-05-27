@@ -34,6 +34,7 @@ class GameConfig:
 
     # Special cards (1 each by default)
     embargo_count: int = 1
+    relocation_count: int = 8
     overtime_count: int = 1
     genius_count: int = 1
     propaganda_count: int = 1
@@ -46,6 +47,7 @@ class GameConfig:
             + self.colonists_count
             + self.military_count
             + self.embargo_count
+            + self.relocation_count
             + self.overtime_count
             + self.genius_count
             + self.propaganda_count

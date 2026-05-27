@@ -1,17 +1,15 @@
 import random
 from abc import ABC, abstractmethod
 
-from card import (Card, Engineers, Colonists, Military, Embargo, Overtime, Genius, Propaganda)
+from card import (Card, Engineers, Colonists, Military,
+                  Embargo, Relocation, Overtime, Genius, Propaganda)
 from game import PlayerView
 
 
 # Ordered from most cooperative to most competitive.
-# Used to sort a hand when the strategy has a clear axis preference.
-# Launch Now is last in both orderings — it is never deployed unless no other
-# card is available (with hand_size=8 and num_modules=6 that never happens).
-COOPERATION_ORDER = [Engineers, Overtime, Genius, Colonists, Embargo, Propaganda, Military]
+COOPERATION_ORDER = [Engineers, Overtime, Genius, Colonists, Relocation, Embargo, Propaganda, Military]
 
-AGGRESSION_ORDER = [Military, Propaganda, Colonists, Embargo, Genius, Engineers, Overtime]
+AGGRESSION_ORDER = [Military, Propaganda, Colonists, Relocation, Embargo, Genius, Engineers, Overtime]
 
 class Strategy(ABC):
     """
@@ -26,6 +24,11 @@ class Strategy(ABC):
     @abstractmethod
     def choose_deployment(self, view: PlayerView) -> dict:
         raise NotImplementedError
+
+    def choose_relocation_target(self, view: PlayerView, _module_idx: int, neighbors: list[int]) -> int:
+        """Default: pick the neighbor where the opponent leads most (or we're closest to losing)."""
+        p, opp = view.player_idx, 1 - view.player_idx
+        return max(neighbors, key=lambda i: view.modules[i].influence[opp] - view.modules[i].influence[p])
 
 
 # ---------------------------------------------------------------------------
@@ -47,10 +50,7 @@ def _greedy_assign(module_order: list, card_order: list) -> dict:
 # ---------------------------------------------------------------------------
 
 class RandomStrategy(Strategy):
-    """
-    Randomly selects 6 cards and assigns them to modules at random.
-    Holds back Launch Now unless forced (i.e., not enough other cards).
-    """
+    """Randomly selects cards and assigns them to modules at random."""
 
     def __init__(self, rng: random.Random | None = None):
         self._rng = rng or random.Random()
@@ -62,6 +62,9 @@ class RandomStrategy(Strategy):
         modules = list(range(n))
         self._rng.shuffle(modules)
         return dict(zip(modules, pool[:n]))
+
+    def choose_relocation_target(self, view: PlayerView, _module_idx: int, neighbors: list[int]) -> int:
+        return self._rng.choice(neighbors)
 
 
 class CooperativeStrategy(Strategy):

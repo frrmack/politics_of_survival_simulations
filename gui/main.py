@@ -15,7 +15,8 @@ if _PARENT not in sys.path:
 import pygame
 
 from config import GameConfig
-from card import (Card, Engineers, Colonists, Military, Embargo, Overtime, Genius, Propaganda)
+from card import (Card, Engineers, Colonists, Military,
+                  Embargo, Relocation, Overtime, Genius, Propaganda)
 from module import Module
 from game import Game, PlayerView, RoundRecord
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
@@ -49,6 +50,7 @@ CARD_COLORS = {
     Colonists:  (60,  100, 180),
     Military:   (180,  40,  40),
     Embargo:    (90,  100, 120),
+    Relocation: (180, 110,  20),
     Overtime:   (20,  160,  90),
     Genius:     (180, 150,  20),
     Propaganda: (140,  50, 180),
@@ -59,6 +61,7 @@ CARD_ABBR = {
     Colonists:  "COL",
     Military:   "MIL",
     Embargo:    "EMB",
+    Relocation: "RLO",
     Overtime:   "OVT",
     Genius:     "GEN",
     Propaganda: "PRO",
@@ -69,6 +72,7 @@ CARD_EFFECT = {
     Colonists:  ("+1 inf", ""),
     Military:   ("+2 inf", "(-1 dev vs MIL)"),
     Embargo:    ("freeze module", "rival irrelevant"),
+    Relocation: ("-1 inf here", "+1 inf neighbor"),
     Overtime:   ("+2 dev", ""),
     Genius:     ("+1 inf", "+1 dev"),
     Propaganda: ("+2 inf", ""),
@@ -78,12 +82,13 @@ CARD_W, CARD_H = 90, 130
 DIE_BOX = 100   # size of die box including border
 
 # States
-SETUP        = "SETUP"
-ROUND_START  = "ROUND_START"
-DEPLOY       = "DEPLOY"
-PASS_SCREEN  = "PASS_SCREEN"
-CONSEQUENCES = "CONSEQUENCES"
-GAME_OVER    = "GAME_OVER"
+SETUP              = "SETUP"
+ROUND_START        = "ROUND_START"
+DEPLOY             = "DEPLOY"
+PASS_SCREEN        = "PASS_SCREEN"
+CHOOSE_RELOCATION  = "CHOOSE_RELOCATION"
+CONSEQUENCES       = "CONSEQUENCES"
+GAME_OVER          = "GAME_OVER"
 
 PLAYER_NAMES = ["Player 1", "Player 2"]
 STRATEGY_LABELS = ["Human", "Cooperative", "Aggressive", "Balanced", "Random"]
@@ -95,6 +100,7 @@ STRATEGY_LABELS = ["Human", "Cooperative", "Aggressive", "Balanced", "Random"]
 class HumanStrategy(Strategy):
     def __init__(self):
         self._deployment = {}
+        self._relocation_targets = {}
 
     def set_deployment(self, d):
         self._deployment = d
@@ -103,6 +109,12 @@ class HumanStrategy(Strategy):
         d = self._deployment
         self._deployment = {}
         return d
+
+    def set_relocation_target(self, module_idx: int, target_idx: int):
+        self._relocation_targets[module_idx] = target_idx
+
+    def choose_relocation_target(self, _view: PlayerView, module_idx: int, _neighbors: list) -> int:
+        return self._relocation_targets.pop(module_idx)
 
 # ---------------------------------------------------------------------------
 # UI helpers
@@ -447,6 +459,9 @@ class App:
         self.assignments    = {}  # mod_idx -> hand_idx
         self.modules_before = None
         self.consequences_data = None
+        self.current_deployments = None
+        self.pending_relocation_choices = []   # list of (player_idx, mod_idx, neighbors)
+        self.current_relocation_idx = 0
 
     # ------------------------------------------------------------------
     # ROUND_START state
@@ -503,14 +518,41 @@ class App:
         self._run_round()
 
     def _run_round(self):
-        """Actually run the round (may or may not involve human deployments)."""
+        """Collect all deployments, then branch to relocation choices or straight to effects."""
         g = self.game
         g.round_num += 1
 
-        # For human players: their HumanStrategy already has deployment set.
-        # For AI players: _play_round will call choose_deployment.
-        g._play_round()
+        self.current_deployments = g._collect_deployments()
 
+        # Build list of relocation choices needed from human players only.
+        # (AI relocation choices are handled automatically in _collect_choices.)
+        self.pending_relocation_choices = []
+        for mod_idx in range(g.config.num_modules):
+            for pi in sorted(self.human_players):
+                card = self.current_deployments[pi][mod_idx]
+                if isinstance(card, Relocation):
+                    neighbors = g._get_neighbors(mod_idx)
+                    if len(neighbors) > 1:
+                        self.pending_relocation_choices.append((pi, mod_idx, neighbors))
+
+        self.current_relocation_idx = 0
+        if self.pending_relocation_choices:
+            self.state = CHOOSE_RELOCATION
+        else:
+            self._finish_round()
+
+    def _advance_relocation_choices(self):
+        """Move to the next pending relocation choice, or finish the round."""
+        self.current_relocation_idx += 1
+        if self.current_relocation_idx < len(self.pending_relocation_choices):
+            self.state = CHOOSE_RELOCATION
+        else:
+            self._finish_round()
+
+    def _finish_round(self):
+        """Apply all effects, snapshot results, and transition to CONSEQUENCES."""
+        g = self.game
+        g._play_round_from_deployments(self.current_deployments)
         after = snapshot_modules(g.modules)
         record = g.history[-1]
         self.consequences_data = (self.modules_before, after, record)
@@ -664,6 +706,52 @@ class App:
                 self.assignments   = {}
 
     # ------------------------------------------------------------------
+    # CHOOSE_RELOCATION state
+    # ------------------------------------------------------------------
+
+    def _draw_choose_relocation(self):
+        s = self.screen
+        s.fill(BG)
+        g = self.game
+        pi, mod_idx, neighbors = self.pending_relocation_choices[self.current_relocation_idx]
+        p_color = P1_COLOR if pi == 0 else P2_COLOR
+
+        draw_multicolor_text(s,
+            [(f"Round {g.round_num} — ", WHITE),
+             (f"Player {pi+1}: ", p_color),
+             ("Choose Relocation Target", WHITE)],
+            self.f_title, 38, W//2)
+
+        draw_text(s,
+                  f"You deployed Relocation to Module {mod_idx+1}. "
+                  f"Where should your influence move?",
+                  self.f_body, GREY, W//2, 74)
+
+        self._draw_modules(s, top=160, interactive=False,
+                           relocation_source=mod_idx,
+                           relocation_targets=neighbors)
+
+        draw_text(s, "Click a highlighted module to relocate your influence there.",
+                  self.f_body, GOLD, W//2, H - 50)
+
+    def _handle_choose_relocation(self, event):
+        if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
+            return
+        if not hasattr(self, '_module_slots'):
+            return
+        _, mod_idx, neighbors = self.pending_relocation_choices[self.current_relocation_idx]
+        pi = self.pending_relocation_choices[self.current_relocation_idx][0]
+        for target_idx in neighbors:
+            if target_idx in self._module_slots:
+                if self._module_slots[target_idx].collidepoint(event.pos):
+                    for p, hs in self.human_strategies:
+                        if p == pi:
+                            hs.set_relocation_target(mod_idx, target_idx)
+                            break
+                    self._advance_relocation_choices()
+                    return
+
+    # ------------------------------------------------------------------
     # CONSEQUENCES state
     # ------------------------------------------------------------------
 
@@ -746,7 +834,8 @@ class App:
     def _draw_modules(self, surf, top=130, interactive=False,
                       show_assignments=False, deploy_player=None,
                       small_die=False, played_cards=None,
-                      before_state=None):
+                      before_state=None,
+                      relocation_source=None, relocation_targets=None):
         g = self.game
         n = g.config.num_modules
         die_sz   = 60 if small_die else 80
@@ -760,7 +849,8 @@ class App:
         card_band = (MINI_H + MINI_GAP) if played_cards else 0
         box_top  = top + card_band
 
-        if interactive:
+        # Always populate _module_slots when relocation_targets are shown (for click detection)
+        if interactive or relocation_targets is not None:
             self._module_slots = {}
 
         for mi, mod in enumerate(g.modules):
@@ -772,10 +862,18 @@ class App:
             box_bg = (50, 60, 80) if assigned_here else PANEL
             lead = mod.winner()  # 0, 1, or None
             lead_color = P1_COLOR if lead == 0 else (P2_COLOR if lead == 1 else DARK_GREY)
+
+            # Relocation highlight overrides lead color
+            if relocation_source is not None and mi == relocation_source:
+                lead_color = (220, 100, 20)   # orange — source
+            elif relocation_targets is not None and mi in relocation_targets:
+                lead_color = GREEN             # green — clickable target
+                box_bg     = (30, 60, 35)
+
             pygame.draw.rect(surf, box_bg, box_rect, border_radius=8)
             pygame.draw.rect(surf, lead_color, box_rect, 2, border_radius=8)
 
-            if interactive:
+            if interactive or relocation_targets is not None:
                 self._module_slots[mi] = box_rect
 
             # Module label
@@ -853,6 +951,8 @@ class App:
                     self._handle_deploy(event)
                 elif self.state == PASS_SCREEN:
                     self._handle_pass_screen(event)
+                elif self.state == CHOOSE_RELOCATION:
+                    self._handle_choose_relocation(event)
                 elif self.state == CONSEQUENCES:
                     self._handle_consequences(event)
                 elif self.state == GAME_OVER:
@@ -872,6 +972,8 @@ class App:
                 self._draw_deploy()
             elif self.state == PASS_SCREEN:
                 self._draw_pass_screen()
+            elif self.state == CHOOSE_RELOCATION:
+                self._draw_choose_relocation()
             elif self.state == CONSEQUENCES:
                 self._draw_consequences()
             elif self.state == GAME_OVER:
