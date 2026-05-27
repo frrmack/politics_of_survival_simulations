@@ -33,7 +33,9 @@ class GameConfig:
     military_count: int = 10
 
     # Special cards (excluded from play; set > 0 to reintroduce individually)
-    genius_count: int = 0
+    overtime_count: int = 1
+    genius_count: int = 1
+    propaganda_count: int = 1
 
 
     @property
@@ -42,5 +44,7 @@ class GameConfig:
             self.engineers_count
             + self.colonists_count
             + self.military_count
+            + self.overtime_count
             + self.genius_count
+            + self.propaganda_count
         )

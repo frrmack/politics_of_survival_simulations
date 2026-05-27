@@ -1,7 +1,7 @@
 import random
 from abc import ABC, abstractmethod
 
-from card import (Card, Engineers, Colonists, Military, Genius)
+from card import (Card, Engineers, Colonists, Military, Overtime, Genius, Propaganda)
 from game import PlayerView
 
 
@@ -9,9 +9,9 @@ from game import PlayerView
 # Used to sort a hand when the strategy has a clear axis preference.
 # Launch Now is last in both orderings — it is never deployed unless no other
 # card is available (with hand_size=8 and num_modules=6 that never happens).
-COOPERATION_ORDER = [Engineers, Genius, Colonists, Military]
+COOPERATION_ORDER = [Engineers, Overtime, Genius, Colonists, Propaganda, Military]
 
-AGGRESSION_ORDER = [Military, Colonists, Genius, Engineers]
+AGGRESSION_ORDER = [Military, Propaganda, Colonists, Genius, Engineers, Overtime]
 
 class Strategy(ABC):
     """
@@ -131,14 +131,16 @@ class BalancedStrategy(Strategy):
 
             dev_value = {
                 Engineers: 1.0,
-                Genius:     1.0,
+                Overtime:  2.0,
+                Genius:    1.0,
             }.get(type(card), 0.0)
 
             inf_value = {
-                Military:  2.0,
-                Colonists: 1.0,
-                Genius:    2.0,
-                Engineers: 0.0,
+                Military:   2.0,
+                Propaganda: 2.0,
+                Colonists:  1.0,
+                Genius:     1.0,
+                Engineers:  0.0,
             }.get(type(card), 0.0)
 
             dev_urgency = dev_gap / rounds_left

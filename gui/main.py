@@ -15,7 +15,7 @@ if _PARENT not in sys.path:
 import pygame
 
 from config import GameConfig
-from card import (Card, Engineers, Colonists, Military, Genius)
+from card import (Card, Engineers, Colonists, Military, Overtime, Genius, Propaganda)
 from module import Module
 from game import Game, PlayerView, RoundRecord
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
@@ -45,24 +45,30 @@ P1_COLOR     = (70,  165, 155)   # muted teal  — P1 identity color
 P2_COLOR     = (180,  75, 155)   # muted magenta — P2 identity color
 
 CARD_COLORS = {
-    Engineers: (34,  120,  60),
-    Colonists: (60,  100, 180),
-    Military:  (180,  40,  40),
-    Genius:    (180, 150,  20),
+    Engineers:  (34,  120,  60),
+    Colonists:  (60,  100, 180),
+    Military:   (180,  40,  40),
+    Overtime:   (20,  160,  90),
+    Genius:     (180, 150,  20),
+    Propaganda: (140,  50, 180),
 }
 
 CARD_ABBR = {
-    Engineers: "ENG",
-    Colonists: "COL",
-    Military:  "MIL",
-    Genius:    "GEN",
+    Engineers:  "ENG",
+    Colonists:  "COL",
+    Military:   "MIL",
+    Overtime:   "OVT",
+    Genius:     "GEN",
+    Propaganda: "PRO",
 }
 
 CARD_EFFECT = {
-    Engineers: ("+1 dev", ""),
-    Colonists: ("+1 inf", ""),
-    Military:  ("+2 inf", "(-1 dev vs MIL)"),
-    Genius:    ("+1 inf", "+2 dev"),
+    Engineers:  ("+1 dev", ""),
+    Colonists:  ("+1 inf", ""),
+    Military:   ("+2 inf", "(-1 dev vs MIL)"),
+    Overtime:   ("+2 dev", ""),
+    Genius:     ("+1 inf", "+1 dev"),
+    Propaganda: ("+2 inf", ""),
 }
 
 CARD_W, CARD_H = 90, 130
