@@ -15,8 +15,7 @@ if _PARENT not in sys.path:
 import pygame
 
 from config import GameConfig
-from card import (Card, Engineers, Colonists, Military,
-                  Genius, Sabotage, LaunchNow, DoubleAgent)
+from card import (Card, Engineers, Colonists, Military, Genius)
 from module import Module
 from game import Game, PlayerView, RoundRecord
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
@@ -46,33 +45,24 @@ P1_COLOR     = (70,  165, 155)   # muted teal  — P1 identity color
 P2_COLOR     = (180,  75, 155)   # muted magenta — P2 identity color
 
 CARD_COLORS = {
-    Engineers:   (34,  120,  60),
-    Colonists:   (60,  100, 180),
-    Military:    (180,  40,  40),
-    Genius:      (180, 150,  20),
-    Sabotage:    (80,   80,  80),
-    LaunchNow:   (220, 120,   0),
-    DoubleAgent: (120,  40, 160),
+    Engineers: (34,  120,  60),
+    Colonists: (60,  100, 180),
+    Military:  (180,  40,  40),
+    Genius:    (180, 150,  20),
 }
 
 CARD_ABBR = {
-    Engineers:  "ENG",
-    Colonists:   "COL",
-    Military:    "MIL",
-    Genius:      "GEN",
-    Sabotage:    "SAB",
-    LaunchNow:   "LCH",
-    DoubleAgent: "DBL",
+    Engineers: "ENG",
+    Colonists: "COL",
+    Military:  "MIL",
+    Genius:    "GEN",
 }
 
 CARD_EFFECT = {
-    Engineers:  ("+1 dev", ""),
-    Colonists:   ("+1 inf", ""),
-    Military:    ("+2 inf", "(-1 dev vs MIL)"),
-    Genius:      ("+1 inf", "+2 dev"),
-    Sabotage:    ("-1 dev", "on module"),
-    LaunchNow:   ("end game", "now"),
-    DoubleAgent: ("steal rival", "card effect"),
+    Engineers: ("+1 dev", ""),
+    Colonists: ("+1 inf", ""),
+    Military:  ("+2 inf", "(-1 dev vs MIL)"),
+    Genius:    ("+1 inf", "+2 dev"),
 }
 
 CARD_W, CARD_H = 90, 130
@@ -393,7 +383,6 @@ class App:
         # Info blurb
         lines = [
             "Engineers: +0 inf, +1 dev   |   Colonists: +1 inf   |   Military: +2 inf",
-            "Genius: +1 inf, +2 dev   |   Sabotage: -1 dev   |   DoubleAgent: steal effect",
             "Goal: control the most modules. Both lose if < modules_needed are READY.",
         ]
         for i, ln in enumerate(lines):

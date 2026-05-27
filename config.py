@@ -34,9 +34,6 @@ class GameConfig:
 
     # Special cards (excluded from play; set > 0 to reintroduce individually)
     genius_count: int = 0
-    sabotage_count: int = 0
-    launch_now_count: int = 0
-    double_agent_count: int = 0
 
 
     @property
@@ -46,7 +43,4 @@ class GameConfig:
             + self.colonists_count
             + self.military_count
             + self.genius_count
-            + self.sabotage_count
-            + self.launch_now_count
-            + self.double_agent_count
         )

@@ -1,8 +1,7 @@
 import random
 from abc import ABC, abstractmethod
 
-from card import (Card, Engineers, Colonists, Military,
-                  Genius, Sabotage, LaunchNow, DoubleAgent)
+from card import (Card, Engineers, Colonists, Military, Genius)
 from game import PlayerView
 
 
@@ -10,13 +9,9 @@ from game import PlayerView
 # Used to sort a hand when the strategy has a clear axis preference.
 # Launch Now is last in both orderings — it is never deployed unless no other
 # card is available (with hand_size=8 and num_modules=6 that never happens).
-COOPERATION_ORDER = [
-    Engineers, Genius, Colonists, DoubleAgent, Military, Sabotage, LaunchNow
-]
+COOPERATION_ORDER = [Engineers, Genius, Colonists, Military]
 
-AGGRESSION_ORDER = [
-    Military, Colonists, Genius, DoubleAgent, Engineers, Sabotage, LaunchNow
-]
+AGGRESSION_ORDER = [Military, Colonists, Genius, Engineers]
 
 class Strategy(ABC):
     """
@@ -62,11 +57,8 @@ class RandomStrategy(Strategy):
 
     def choose_deployment(self, view: PlayerView) -> dict:
         n = view.config.num_modules
-        regular = [c for c in view.hand if not isinstance(c, LaunchNow)]
-        holdout  = [c for c in view.hand if isinstance(c, LaunchNow)]
-        pool = regular if len(regular) >= n else regular + holdout
+        pool = list(view.hand)
         self._rng.shuffle(pool)
-
         modules = list(range(n))
         self._rng.shuffle(modules)
         return dict(zip(modules, pool[:n]))
@@ -133,9 +125,6 @@ class BalancedStrategy(Strategy):
         rounds_left = max(1, view.config.num_rounds - view.round_num)
 
         def pair_score(mod_idx: int, card: Card) -> float:
-            if isinstance(card, LaunchNow):
-                return -999.0
-
             m = view.modules[mod_idx]
             dev_gap = max(0, view.config.module_ready_threshold - m.dev_level)
             inf_gap = m.influence[opp] - m.influence[p]
@@ -146,11 +135,10 @@ class BalancedStrategy(Strategy):
             }.get(type(card), 0.0)
 
             inf_value = {
-                Military:     2.0,
-                Colonists:    1.0,
-                Genius:       2.0,
-                Engineers:    0.0,
-                DoubleAgent:  2.0,
+                Military:  2.0,
+                Colonists: 1.0,
+                Genius:    2.0,
+                Engineers: 0.0,
             }.get(type(card), 0.0)
 
             dev_urgency = dev_gap / rounds_left

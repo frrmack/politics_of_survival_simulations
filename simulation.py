@@ -43,10 +43,6 @@ class SimulationResults:
     def avg_rounds_played(self) -> float:
         return statistics.mean(r.rounds_played for r in self.results)
 
-    @property
-    def early_launch_rate(self) -> float:
-        return sum(1 for r in self.results if r.early_launch) / self.n
-
     def print_summary(self) -> None:
         n = self.n
         s1, s2 = self.strategy_names
@@ -61,7 +57,6 @@ class SimulationResults:
         print(f"  Extinctions:    {self.extinctions:>7,}  ({100 * self.extinctions / n:5.1f}%)")
         print("  " + "-" * 48)
         print(f"  Ship launch rate:       {100 * self.ship_launch_rate:5.1f}%")
-        print(f"  Early launch rate:      {100 * self.early_launch_rate:5.1f}%")
         print(f"  Avg ready modules:      {self.avg_ready_modules:.2f} / {len(self.results[0].final_modules)}")
         print(f"  Avg rounds played:      {self.avg_rounds_played:.2f}")
         print(bar)

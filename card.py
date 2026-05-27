@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from module import Module
@@ -72,44 +72,4 @@ class Genius(SpecialCard):
     def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
         module.add_influence(player_idx, 1)
         module.adjust_dev(2)
-
-
-@dataclass(frozen=True)
-class Sabotage(SpecialCard):
-    def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
-        module.adjust_dev(-1)
-
-
-@dataclass(frozen=True)
-class LaunchNow(SpecialCard):
-    def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
-        game.trigger_launch(module)
-
-
-@dataclass(frozen=True)
-class DoubleAgent(SpecialCard):
-    def resolve_pair(
-        self,
-        c1: Optional[Card],
-        c2: Optional[Card],
-    ) -> tuple[Optional[Card], Optional[Card]]:
-        """
-        Resolves a Double Agent play. Call on whichever card is a DoubleAgent.
-        DA steals the rival's card: rival plays nothing, DA player plays stolen card.
-        DA vs DA: both cancel.
-        """
-        da1 = isinstance(c1, DoubleAgent)
-        da2 = isinstance(c2, DoubleAgent)
-
-        if da1 and da2:
-            return None, None
-        if da1:
-            return c2, None   # P1 plays P2's card; P2 plays nothing
-        if da2:
-            return None, c1   # P2 plays P1's card; P1 plays nothing
-        return c1, c2
-    
-    def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
-        # DoubleAgent's effect is handled separately in replay.py, since it depends on the opponent's card
-        pass
 

@@ -13,7 +13,7 @@ import random
 
 from config import GameConfig
 from game import Game, PlayerView, RoundRecord
-from card import LaunchNow, DoubleAgent, Military
+from card import Military
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
                       RandomStrategy, BalancedStrategy)
 
@@ -23,8 +23,7 @@ from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
 # ---------------------------------------------------------------------------
 
 _ABBR = {
-    'Engineers': 'Eng', 'Colonists': 'Col', 'Military': 'Mil',
-    'Genius': 'Gen', 'Sabotage': 'Sab', 'LaunchNow': 'LNC', 'DoubleAgent': 'DA',
+    'Engineers': 'Eng', 'Colonists': 'Col', 'Military': 'Mil', 'Genius': 'Gen',
 }
 
 def _abbr(card) -> str:
@@ -35,7 +34,7 @@ def _hand_summary(hand) -> str:
     for c in hand:
         a = _abbr(c)
         counts[a] = counts.get(a, 0) + 1
-    order = ['Sci', 'Col', 'Mil', 'Gen', 'Sab', 'DA', 'LNC']
+    order = ['Eng', 'Col', 'Mil', 'Gen']
     return '  '.join(f"{a}×{counts[a]}" for a in order if a in counts)
 
 
@@ -86,7 +85,6 @@ class ReplayGame(Game):
 
         # Resolution with per-module tracing
         print("\n  Resolution:")
-        launch_now = False
         for mod_idx, module in enumerate(self.modules):
             c1_raw = deployments[0][mod_idx]
             c2_raw = deployments[1][mod_idx]
@@ -95,9 +93,7 @@ class ReplayGame(Game):
             dev_before = module.dev_level
             inf_before = list(module.influence)
 
-            triggered = self.resolve_module(module, c1_raw, c2_raw)
-            if triggered:
-                launch_now = True
+            self.resolve_module(module, c1_raw, c2_raw)
 
             d1 = module.influence[0] - inf_before[0]
             d2 = module.influence[1] - inf_before[1]
@@ -113,14 +109,6 @@ class ReplayGame(Game):
             notes = []
             if isinstance(c1_raw, Military) and isinstance(c2_raw, Military):
                 notes.append("MvM")
-            elif isinstance(c1_raw, DoubleAgent) and isinstance(c2_raw, DoubleAgent):
-                notes.append("DA×DA cancel")
-            elif isinstance(c1_raw, DoubleAgent):
-                notes.append(f"P1 DA steals {_abbr(c2_raw)}")
-            elif isinstance(c2_raw, DoubleAgent):
-                notes.append(f"P2 DA steals {_abbr(c1_raw)}")
-            if triggered:
-                notes.append("LAUNCH NOW!")
             note_str = f"  [{', '.join(notes)}]" if notes else ""
 
             status = "READY" if module.is_ready else f"need +{module.READY_THRESHOLD - module.dev_level}"
@@ -128,7 +116,6 @@ class ReplayGame(Game):
                   f"  →  {'  '.join(effects):<26}"
                   f"   [{status:>8}   P1= {module.influence[0]:>2}  P2= {module.influence[1]:>2}]   {note_str}")
 
-        record.launch_triggered = launch_now
         self.history.append(record)
 
         # Discard played cards
@@ -144,10 +131,6 @@ class ReplayGame(Game):
         for player_idx in refill_order:
             while len(self.hands[player_idx]) < self.config.hand_size:
                 self.hands[player_idx].append(self.deck.draw())
-
-        if launch_now:
-            self.game_over = True
-            self.early_launch = True
 
         # Hands after redraw
         print("\n  Hands after redraw:")
@@ -213,9 +196,6 @@ def replay(
         else:
             print(f"  OUTCOME: DRAW"
                   f"  (modules: P1={result.modules_won[0]}  P2={result.modules_won[1]})")
-        if result.early_launch:
-            print("  (game ended by Launch Now card)")
-
     print(f"{'═'*64}\n")
     return result
 
