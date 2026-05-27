@@ -2,14 +2,14 @@ import random
 from abc import ABC, abstractmethod
 
 from card import (Card, Engineers, Colonists, Military,
-                  Embargo, Relocation, Overtime, Genius, Propaganda)
+                  Embargo, Salvage, Relocation, Overtime, Genius, Propaganda)
 from game import PlayerView
 
 
 # Ordered from most cooperative to most competitive.
-COOPERATION_ORDER = [Engineers, Overtime, Genius, Colonists, Relocation, Embargo, Propaganda, Military]
+COOPERATION_ORDER = [Engineers, Overtime, Genius, Colonists, Relocation, Salvage, Embargo, Propaganda, Military]
 
-AGGRESSION_ORDER = [Military, Propaganda, Colonists, Relocation, Embargo, Genius, Engineers, Overtime]
+AGGRESSION_ORDER = [Military, Propaganda, Colonists, Relocation, Salvage, Embargo, Genius, Engineers, Overtime]
 
 class Strategy(ABC):
     """
@@ -29,6 +29,11 @@ class Strategy(ABC):
         """Default: pick the neighbor where the opponent leads most (or we're closest to losing)."""
         p, opp = view.player_idx, 1 - view.player_idx
         return max(neighbors, key=lambda i: view.modules[i].influence[opp] - view.modules[i].influence[p])
+
+    def choose_salvage_card(self, _view: PlayerView, _module_idx: int, available: list) -> object:
+        """Default: pick the highest-priority card by cooperation order."""
+        type_rank = {cls: rank for rank, cls in enumerate(COOPERATION_ORDER)}
+        return min(available, key=lambda c: type_rank.get(type(c), 99))
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +70,9 @@ class RandomStrategy(Strategy):
 
     def choose_relocation_target(self, view: PlayerView, _module_idx: int, neighbors: list[int]) -> int:
         return self._rng.choice(neighbors)
+
+    def choose_salvage_card(self, _view: PlayerView, _module_idx: int, available: list) -> object:
+        return self._rng.choice(available)
 
 
 class CooperativeStrategy(Strategy):
@@ -111,6 +119,10 @@ class AggressiveStrategy(Strategy):
         hand_sorted = sorted(view.hand, key=lambda c: type_rank.get(type(c), 99))
 
         return _greedy_assign(module_order, hand_sorted)
+
+    def choose_salvage_card(self, _view: PlayerView, _module_idx: int, available: list) -> object:
+        type_rank = {cls: rank for rank, cls in enumerate(AGGRESSION_ORDER)}
+        return min(available, key=lambda c: type_rank.get(type(c), 99))
 
 
 class BalancedStrategy(Strategy):

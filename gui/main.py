@@ -16,7 +16,7 @@ import pygame
 
 from config import GameConfig
 from card import (Card, Engineers, Colonists, Military,
-                  Embargo, Relocation, Overtime, Genius, Propaganda)
+                  Embargo, Salvage, Relocation, Overtime, Genius, Propaganda)
 from module import Module
 from game import Game, PlayerView, RoundRecord
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
@@ -50,6 +50,7 @@ CARD_COLORS = {
     Colonists:  (60,  100, 180),
     Military:   (180,  40,  40),
     Embargo:    (90,  100, 120),
+    Salvage:    (20,  150, 150),
     Relocation: (180, 110,  20),
     Overtime:   (20,  160,  90),
     Genius:     (180, 150,  20),
@@ -61,6 +62,7 @@ CARD_ABBR = {
     Colonists:  "COL",
     Military:   "MIL",
     Embargo:    "EMB",
+    Salvage:    "SAL",
     Relocation: "RLO",
     Overtime:   "OVT",
     Genius:     "GEN",
@@ -72,6 +74,7 @@ CARD_EFFECT = {
     Colonists:  ("+1 inf", ""),
     Military:   ("+2 inf", "(-1 dev vs MIL)"),
     Embargo:    ("freeze module", "rival irrelevant"),
+    Salvage:    ("pick from discard", "play it here"),
     Relocation: ("-1 inf here", "+1 inf neighbor"),
     Overtime:   ("+2 dev", ""),
     Genius:     ("+1 inf", "+1 dev"),
@@ -86,6 +89,7 @@ SETUP              = "SETUP"
 ROUND_START        = "ROUND_START"
 DEPLOY             = "DEPLOY"
 PASS_SCREEN        = "PASS_SCREEN"
+CHOOSE_SALVAGE     = "CHOOSE_SALVAGE"
 CHOOSE_RELOCATION  = "CHOOSE_RELOCATION"
 CONSEQUENCES       = "CONSEQUENCES"
 GAME_OVER          = "GAME_OVER"
@@ -460,9 +464,12 @@ class App:
         self.modules_before = None
         self.consequences_data = None
         self.current_deployments = None
-        self.pending_all_relocation_choices = []  # (player_idx, mod_idx, neighbors), all players, left-to-right
+        self.resolved_deployments = None
+        self.collected_salvage_choices = {}       # {(mod_idx, player_idx): chosen_card}
         self.collected_relocation_targets = {}    # {(mod_idx, player_idx): target_idx}
-        self.current_relocation_idx = 0
+        # Unified left-to-right choice queue: ('salvage', pi, mod) or ('relocation', pi, mod, neighbors)
+        self.pending_choices = []
+        self.current_choice_idx = 0
 
     # ------------------------------------------------------------------
     # ROUND_START state
@@ -478,10 +485,6 @@ class App:
         btn = pygame.Rect(W//2 - 130, 680, 260, 52)
         draw_button(s, "Begin Deployment", self.f_h2, btn, (40, 80, 150), border_color=BLUE)
         self._begin_btn = btn
-        # show hand info
-        for pi in range(2):
-            label = f"P{pi+1} hand: {len(g.hands[pi])} cards"
-            draw_text(s, label, self.f_body, GREY, 80 + pi*1100, H - 30)
 
     def _handle_round_start(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -519,49 +522,89 @@ class App:
         self._run_round()
 
     def _run_round(self):
-        """Collect all deployments, then work through relocation choices left-to-right."""
+        """Collect all deployments, then run the unified choice queue."""
         g = self.game
         g.round_num += 1
 
         self.current_deployments = g._collect_deployments()
+        self.resolved_deployments = [{**dep} for dep in self.current_deployments]
+        self.collected_salvage_choices = {}
         self.collected_relocation_targets = {}
 
-        # Build unified ordered list of all relocation choices (both players, left-to-right).
-        # Single-neighbor modules are auto-selected immediately; all others go in the queue.
-        self.pending_all_relocation_choices = []
+        # Build unified choice queue: module by module, Salvage before Relocation within
+        # each module (priority order only governs same-module ordering).
+        self.pending_choices = []
         for mod_idx in range(g.config.num_modules):
+            c1 = self.current_deployments[0][mod_idx]
+            c2 = self.current_deployments[1][mod_idx]
+            if isinstance(c1, Embargo) or isinstance(c2, Embargo):
+                continue
             for player_idx in range(2):
-                card = self.current_deployments[player_idx][mod_idx]
-                if isinstance(card, Relocation):
+                if isinstance(self.current_deployments[player_idx][mod_idx], Salvage):
+                    self.pending_choices.append(('salvage', player_idx, mod_idx))
+            for player_idx in range(2):
+                if isinstance(self.current_deployments[player_idx][mod_idx], Relocation):
                     neighbors = g._get_neighbors(mod_idx)
                     if len(neighbors) == 1:
                         self.collected_relocation_targets[(mod_idx, player_idx)] = neighbors[0]
                     else:
-                        self.pending_all_relocation_choices.append((player_idx, mod_idx, neighbors))
+                        self.pending_choices.append(('relocation', player_idx, mod_idx, neighbors))
 
-        self.current_relocation_idx = 0
-        self._advance_relocation_choices()
+        self.current_choice_idx = 0
+        self._advance_choices()
 
-    def _advance_relocation_choices(self):
-        """Process the next choice: resolve AI immediately, pause for human."""
+    def _apply_salvage(self, player_idx, mod_idx, chosen):
+        """Record a Salvage resolution and insert a Relocation choice if needed."""
         g = self.game
-        while self.current_relocation_idx < len(self.pending_all_relocation_choices):
-            player_idx, mod_idx, neighbors = self.pending_all_relocation_choices[self.current_relocation_idx]
-            if player_idx in self.human_players:
-                self.state = CHOOSE_RELOCATION
-                return
-            # AI: resolve immediately and keep going
-            view = g._make_view(player_idx)
-            target = g.strategies[player_idx].choose_relocation_target(view, mod_idx, neighbors)
-            self.collected_relocation_targets[(mod_idx, player_idx)] = target
-            self.current_relocation_idx += 1
+        self.collected_salvage_choices[(mod_idx, player_idx)] = chosen
+        self.resolved_deployments[player_idx][mod_idx] = chosen
+        g.deck._discard.remove(chosen)
+        if isinstance(chosen, Relocation):
+            neighbors = g._get_neighbors(mod_idx)
+            if len(neighbors) == 1:
+                self.collected_relocation_targets[(mod_idx, player_idx)] = neighbors[0]
+            else:
+                self.pending_choices.insert(
+                    self.current_choice_idx + 1,
+                    ('relocation', player_idx, mod_idx, neighbors)
+                )
+
+    def _advance_choices(self):
+        """Process the next queued choice: resolve AI immediately, pause for human."""
+        g = self.game
+        while self.current_choice_idx < len(self.pending_choices):
+            choice = self.pending_choices[self.current_choice_idx]
+            if choice[0] == 'salvage':
+                _, player_idx, mod_idx = choice
+                available = list(g.deck._discard)
+                if not available:
+                    self.current_choice_idx += 1
+                    continue
+                if player_idx in self.human_players:
+                    self.state = CHOOSE_SALVAGE
+                    return
+                view = g._make_view(player_idx)
+                chosen = g.strategies[player_idx].choose_salvage_card(view, mod_idx, available)
+                self._apply_salvage(player_idx, mod_idx, chosen)
+                self.current_choice_idx += 1
+            elif choice[0] == 'relocation':
+                _, player_idx, mod_idx, neighbors = choice
+                if player_idx in self.human_players:
+                    self.state = CHOOSE_RELOCATION
+                    return
+                view = g._make_view(player_idx)
+                target = g.strategies[player_idx].choose_relocation_target(view, mod_idx, neighbors)
+                self.collected_relocation_targets[(mod_idx, player_idx)] = target
+                self.current_choice_idx += 1
         self._finish_round()
 
     def _finish_round(self):
-        """Apply pre-collected choices, snapshot results, and transition to CONSEQUENCES."""
+        """Apply all pre-collected choices, snapshot results, and go to CONSEQUENCES."""
         g = self.game
-        g._apply_effects(self.current_deployments, self.collected_relocation_targets)
-        g._discard_and_refill(self.current_deployments)
+        g._apply_effects(self.current_deployments, self.collected_relocation_targets,
+                         self.collected_salvage_choices, self.resolved_deployments)
+        g._discard_and_refill(self.current_deployments,
+                              salvage_used=list(self.collected_salvage_choices.values()))
         after = snapshot_modules(g.modules)
         record = g.history[-1]
         self.consequences_data = (self.modules_before, after, record)
@@ -715,6 +758,81 @@ class App:
                 self.assignments   = {}
 
     # ------------------------------------------------------------------
+    # CHOOSE_SALVAGE state
+    # ------------------------------------------------------------------
+
+    def _draw_choose_salvage(self):
+        s = self.screen
+        s.fill(BG)
+        g = self.game
+        _, player_idx, mod_idx = self.pending_choices[self.current_choice_idx]
+        p_color = P1_COLOR if player_idx == 0 else P2_COLOR
+        available = list(g.deck._discard)
+
+        draw_multicolor_text(s,
+            [(f"Round {g.round_num} — ", WHITE),
+             (f"Player {player_idx+1}: ", p_color),
+             ("Choose a Card to Salvage", WHITE)],
+            self.f_title, 38, W//2)
+        draw_text(s,
+                  f"You deployed Salvage to Module {mod_idx+1}. "
+                  f"Pick any card from the discard pile to play here instead.",
+                  self.f_body, GREY, W//2, 74)
+
+        # Use original deployments so _chain() can detect Salvage and show full chains.
+        # collected_salvage_choices carries what each Salvage resolved to.
+        played_cards = {
+            mi: (self.current_deployments[0][mi], self.current_deployments[1][mi])
+            for mi in range(g.config.num_modules)
+        }
+        _module_top = 100
+        self._draw_modules(s, top=_module_top, interactive=False, small_die=True,
+                           played_cards=played_cards,
+                           relocation_source=mod_idx,
+                           played_relocation_targets=self.collected_relocation_targets,
+                           played_salvage_choices=self.collected_salvage_choices)
+
+        # Compute discard label Y dynamically to avoid overlap with module cards
+        _has_chain = bool(self.collected_salvage_choices)
+        _chain_slots = 2 if _has_chain else 1
+        _card_band = _chain_slots * (MINI_H + MINI_GAP)
+        _box_top = _module_top + _card_band
+        _slot_h = 60 + 65   # small_die=True: die_sz=60, slot_h = die_sz + 65
+        discard_label_y = _box_top + _slot_h + _chain_slots * (MINI_H + MINI_GAP) + 25
+
+        # Discard pile as selectable small cards
+        draw_text(s, f"Discard pile — {len(available)} card(s):",
+                  self.f_h3, GOLD, 40, discard_label_y, anchor="topleft")
+
+        self._salvage_card_rects = {}
+        cw, ch, gap = 72, 104, 8
+        per_row = max(1, (W - 40) // (cw + gap))
+        for ci, card in enumerate(available):
+            col = ci % per_row
+            row = ci // per_row
+            cx = 40 + col * (cw + gap)
+            cy = discard_label_y + 25 + row * (ch + gap)
+            r = draw_card(s, card, cx, cy, small=True)
+            self._salvage_card_rects[ci] = (r, card)
+
+        if not available:
+            draw_text(s, "(empty — Salvage will have no effect)",
+                      self.f_body, DARK_GREY, W//2, 480)
+
+    def _handle_choose_salvage(self, event):
+        if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
+            return
+        if not hasattr(self, '_salvage_card_rects'):
+            return
+        _, player_idx, mod_idx = self.pending_choices[self.current_choice_idx]
+        for ci, (r, card) in self._salvage_card_rects.items():
+            if r.collidepoint(event.pos):
+                self._apply_salvage(player_idx, mod_idx, card)
+                self.current_choice_idx += 1
+                self._advance_choices()
+                return
+
+    # ------------------------------------------------------------------
     # CHOOSE_RELOCATION state
     # ------------------------------------------------------------------
 
@@ -722,7 +840,7 @@ class App:
         s = self.screen
         s.fill(BG)
         g = self.game
-        pi, mod_idx, neighbors = self.pending_all_relocation_choices[self.current_relocation_idx]
+        _, pi, mod_idx, neighbors = self.pending_choices[self.current_choice_idx]
         p_color = P1_COLOR if pi == 0 else P2_COLOR
 
         draw_multicolor_text(s,
@@ -744,7 +862,8 @@ class App:
                            played_cards=played_cards,
                            relocation_source=mod_idx,
                            relocation_targets=neighbors,
-                           played_relocation_targets=self.collected_relocation_targets)
+                           played_relocation_targets=self.collected_relocation_targets,
+                           played_salvage_choices=self.collected_salvage_choices)
 
         draw_text(s, "Click a highlighted module to relocate your influence there.",
                   self.f_body, GOLD, W//2, H - 50)
@@ -754,13 +873,13 @@ class App:
             return
         if not hasattr(self, '_module_slots'):
             return
-        player_idx, mod_idx, neighbors = self.pending_all_relocation_choices[self.current_relocation_idx]
+        _, player_idx, mod_idx, neighbors = self.pending_choices[self.current_choice_idx]
         for target_idx in neighbors:
             if target_idx in self._module_slots:
                 if self._module_slots[target_idx].collidepoint(event.pos):
                     self.collected_relocation_targets[(mod_idx, player_idx)] = target_idx
-                    self.current_relocation_idx += 1
-                    self._advance_relocation_choices()
+                    self.current_choice_idx += 1
+                    self._advance_choices()
                     return
 
     # ------------------------------------------------------------------
@@ -778,7 +897,8 @@ class App:
 
         self._draw_modules(s, top=188, interactive=False,
                            played_cards=record.deployments, before_state=before,
-                           played_relocation_targets=record.relocation_targets)
+                           played_relocation_targets=record.relocation_targets,
+                           played_salvage_choices=record.salvage_choices)
 
         # Button
         last_round = g.round_num >= g.config.num_rounds or g.game_over
@@ -849,7 +969,8 @@ class App:
                       small_die=False, played_cards=None,
                       before_state=None,
                       relocation_source=None, relocation_targets=None,
-                      played_relocation_targets=None):
+                      played_relocation_targets=None,
+                      played_salvage_choices=None):
         g = self.game
         n = g.config.num_modules
         die_sz   = 60 if small_die else 80
@@ -859,8 +980,10 @@ class App:
         total_w  = spacing * n
         start_x  = (W - total_w) // 2
 
-        # When showing played cards, shift the module box down to make room for P2 card above
-        card_band = (MINI_H + MINI_GAP) if played_cards else 0
+        # card_band grows by one slot if any Salvage chain adds a second card
+        has_salvage_chain = bool(played_cards and played_salvage_choices)
+        chain_slots = 2 if has_salvage_chain else 1
+        card_band = chain_slots * (MINI_H + MINI_GAP) if played_cards else 0
         box_top  = top + card_band
 
         # Always populate _module_slots when relocation_targets are shown (for click detection)
@@ -932,29 +1055,49 @@ class App:
                     col   = CARD_COLORS.get(type(acard), GREY)
                     draw_text(surf, abbr, self.f_small, col, cx, abbr_y)
 
-            # Played cards (consequences view): P2 above, P1 below
+            # Played cards: P2 above (chain reads top-down), P1 below (chain reads down)
+            # For Salvage: show original card first, then the chosen card underneath it.
             if played_cards and mi in played_cards:
                 c1, c2 = played_cards[mi]
                 rlo_font = make_font(11, bold=True)
                 rlo_color = CARD_COLORS[Relocation]
+
+                def _chain(orig, player_idx):
+                    """Return list of cards to display for one player's slot (orig, then chosen)."""
+                    cards = [orig]
+                    if played_salvage_choices and isinstance(orig, Salvage):
+                        chosen = played_salvage_choices.get((mi, player_idx))
+                        if chosen is not None:
+                            cards.append(chosen)
+                    return cards
+
+                slot_h_card = MINI_H + MINI_GAP
+
+                # P2 above: chain[0]=original closest to box, chain[-1]=resolved furthest up
                 if c2:
-                    p2_cy = top + MINI_H // 2
-                    draw_mini_card(surf, c2, cx, p2_cy)
-                    if played_relocation_targets and isinstance(c2, Relocation):
-                        t = played_relocation_targets.get((mi, 1))
-                        if t is not None:
-                            arrow = f"→M{t+1}" if t > mi else f"←M{t+1}"
-                            draw_text(surf, arrow, rlo_font, rlo_color,
-                                      cx, p2_cy - MINI_H // 2 - 10)
+                    chain2 = _chain(c2, 1)
+                    for ci, card in enumerate(chain2):
+                        cy = box_top - MINI_GAP - MINI_H // 2 - ci * slot_h_card
+                        draw_mini_card(surf, card, cx, cy)
+                        if played_relocation_targets and isinstance(card, Relocation):
+                            t = played_relocation_targets.get((mi, 1))
+                            if t is not None:
+                                arrow = f"→M{t+1}" if t > mi else f"←M{t+1}"
+                                draw_text(surf, arrow, rlo_font, rlo_color,
+                                          cx, cy - MINI_H // 2 - 10)
+
+                # P1 below: chain[0]=original closest to box, chain[-1]=resolved furthest down
                 if c1:
-                    p1_cy = box_top + slot_h + MINI_GAP + MINI_H // 2
-                    draw_mini_card(surf, c1, cx, p1_cy)
-                    if played_relocation_targets and isinstance(c1, Relocation):
-                        t = played_relocation_targets.get((mi, 0))
-                        if t is not None:
-                            arrow = f"→M{t+1}" if t > mi else f"←M{t+1}"
-                            draw_text(surf, arrow, rlo_font, rlo_color,
-                                      cx, p1_cy + MINI_H // 2 + 12)
+                    chain1 = _chain(c1, 0)
+                    for ci, card in enumerate(chain1):
+                        cy = box_top + slot_h + MINI_GAP + MINI_H // 2 + ci * slot_h_card
+                        draw_mini_card(surf, card, cx, cy)
+                        if played_relocation_targets and isinstance(card, Relocation):
+                            t = played_relocation_targets.get((mi, 0))
+                            if t is not None:
+                                arrow = f"→M{t+1}" if t > mi else f"←M{t+1}"
+                                draw_text(surf, arrow, rlo_font, rlo_color,
+                                          cx, cy + MINI_H // 2 + 12)
 
     # ------------------------------------------------------------------
     # Main loop
@@ -981,6 +1124,8 @@ class App:
                     self._handle_deploy(event)
                 elif self.state == PASS_SCREEN:
                     self._handle_pass_screen(event)
+                elif self.state == CHOOSE_SALVAGE:
+                    self._handle_choose_salvage(event)
                 elif self.state == CHOOSE_RELOCATION:
                     self._handle_choose_relocation(event)
                 elif self.state == CONSEQUENCES:
@@ -1002,12 +1147,34 @@ class App:
                 self._draw_deploy()
             elif self.state == PASS_SCREEN:
                 self._draw_pass_screen()
+            elif self.state == CHOOSE_SALVAGE:
+                self._draw_choose_salvage()
             elif self.state == CHOOSE_RELOCATION:
                 self._draw_choose_relocation()
             elif self.state == CONSEQUENCES:
                 self._draw_consequences()
             elif self.state == GAME_OVER:
                 self._draw_game_over()
+
+            # Persistent card counts — bottom-right, visible in all game states
+            if self.state != SETUP and hasattr(self, 'game'):
+                g = self.game
+                stats = [
+                    ("P1 Hand",      len(g.hands[0])),
+                    ("P2 Hand",      len(g.hands[1])),
+                    ("Draw Pile",    len(g.deck._draw)),
+                    ("Discard Pile", len(g.deck._discard)),
+                ]
+                f_info   = self.f_body
+                line_h   = 18
+                right_x  = W - 10
+                bottom_y = H - 10
+                max_val_w = max(f_info.size(f" {val} cards")[0] for _, val in stats)
+                colon_x   = right_x - max_val_w
+                for i, (label, val) in enumerate(reversed(stats)):
+                    y = bottom_y - i * line_h
+                    draw_text(self.screen, f"{label}:", f_info, GREY, colon_x, y, anchor="midright")
+                    draw_text(self.screen, f" {val} cards", f_info, GREY, colon_x, y, anchor="midleft")
 
             pygame.display.flip()
 

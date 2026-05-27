@@ -13,7 +13,7 @@ import random
 
 from config import GameConfig
 from game import Game, RoundRecord
-from card import Military, Embargo, Relocation
+from card import Military, Embargo, Salvage, Relocation
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
                       RandomStrategy, BalancedStrategy)
 
@@ -24,7 +24,8 @@ from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
 
 _ABBR = {
     'Engineers': 'Eng', 'Colonists': 'Col', 'Military': 'Mil',
-    'Embargo': 'Emb', 'Relocation': 'Rlo', 'Overtime': 'Ovt', 'Genius': 'Gen', 'Propaganda': 'Pro',
+    'Embargo': 'Emb', 'Salvage': 'Sal', 'Relocation': 'Rlo',
+    'Overtime': 'Ovt', 'Genius': 'Gen', 'Propaganda': 'Pro',
 }
 
 def _abbr(card) -> str:
@@ -35,7 +36,7 @@ def _hand_summary(hand) -> str:
     for c in hand:
         a = _abbr(c)
         counts[a] = counts.get(a, 0) + 1
-    order = ['Eng', 'Col', 'Mil', 'Emb', 'Rlo', 'Ovt', 'Gen', 'Pro']
+    order = ['Eng', 'Col', 'Mil', 'Emb', 'Sal', 'Rlo', 'Ovt', 'Gen', 'Pro']
     return '  '.join(f"{a}×{counts[a]}" for a in order if a in counts)
 
 
@@ -70,21 +71,24 @@ class ReplayGame(Game):
 
         # Deployment and choice collection
         deployments = self._collect_deployments()
-        relocation_targets = self._collect_choices(deployments)
+        relocation_targets, salvage_choices, resolved = self._collect_choices(deployments)
 
         # Resolution with per-module tracing
         self._relocation_targets = relocation_targets
-        record = RoundRecord(round_num=rn, relocation_targets=relocation_targets)
+        record = RoundRecord(round_num=rn, relocation_targets=relocation_targets,
+                             salvage_choices=salvage_choices)
         print("\n  Resolution:")
         for mod_idx, module in enumerate(self.modules):
             c1 = deployments[0][mod_idx]
             c2 = deployments[1][mod_idx]
+            r1 = resolved[0][mod_idx]
+            r2 = resolved[1][mod_idx]
             record.deployments[mod_idx] = (c1, c2)
 
             dev_before = module.dev_level
             inf_before = list(module.influence)
 
-            self.resolve_module(module, c1, c2)
+            self.resolve_module(module, r1, r2)
 
             d1 = module.influence[0] - inf_before[0]
             d2 = module.influence[1] - inf_before[1]
@@ -98,13 +102,17 @@ class ReplayGame(Game):
             if not effects: effects.append("no effect")
 
             notes = []
-            if isinstance(c1, Embargo) or isinstance(c2, Embargo):
+            if isinstance(r1, Embargo) or isinstance(r2, Embargo):
                 notes.append("Embargo — module frozen")
-            elif isinstance(c1, Military) and isinstance(c2, Military):
+            elif isinstance(r1, Military) and isinstance(r2, Military):
                 notes.append("MvM")
             else:
+                for pi, orig in [(0, c1), (1, c2)]:
+                    if isinstance(orig, Salvage):
+                        chosen = salvage_choices.get((mod_idx, pi))
+                        notes.append(f"P{pi+1} Sal→{_abbr(chosen) if chosen else 'none'}")
                 rlo_parts = []
-                for pi, c in [(0, c1), (1, c2)]:
+                for pi, c in [(0, r1), (1, r2)]:
                     if isinstance(c, Relocation):
                         t = relocation_targets.get((mod_idx, pi))
                         if t is not None:
@@ -113,13 +121,17 @@ class ReplayGame(Game):
                     notes.append(f"Rlo: {', '.join(rlo_parts)}")
             note_str = f"  [{', '.join(notes)}]" if notes else ""
 
+            # Show resolved card if Salvage substituted something
+            def display(orig, res):
+                return f"{_abbr(orig)}→{_abbr(res)}" if orig is not res else _abbr(orig)
+
             status = "READY" if module.is_ready else f"need +{module.READY_THRESHOLD - module.dev_level}"
-            print(f"    M{mod_idx+1}  P1: {_abbr(c1):<3}  P2: {_abbr(c2):<3}"
+            print(f"    M{mod_idx+1}  P1: {display(c1,r1):<7}  P2: {display(c2,r2):<7}"
                   f"  →  {'  '.join(effects):<26}"
                   f"   [{status:>8}   P1= {module.influence[0]:>2}  P2= {module.influence[1]:>2}]   {note_str}")
 
         self.history.append(record)
-        self._discard_and_refill(deployments)
+        self._discard_and_refill(deployments, salvage_used=list(salvage_choices.values()))
 
         # Hands after redraw
         print("\n  Hands after redraw:")
