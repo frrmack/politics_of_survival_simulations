@@ -106,7 +106,7 @@ class Overtime(SpecialCard):
 
 
 @dataclass(frozen=True)
-class Genius(SpecialCard):
+class Flagship(SpecialCard):
     def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
         module.add_influence(player_idx, 1)
         module.adjust_dev(1)

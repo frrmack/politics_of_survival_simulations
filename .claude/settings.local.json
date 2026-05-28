@@ -8,7 +8,8 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\('gui/main.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
       "Bash(python -c ' *)",
       "Bash(python replay.py --seed 7)",
-      "Bash(python3 replay.py --seed 7 --p1 aggr --p2 bal)"
+      "Bash(python3 replay.py --seed 7 --p1 aggr --p2 bal)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

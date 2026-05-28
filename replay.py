@@ -25,7 +25,7 @@ from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
 _ABBR = {
     'Engineers': 'Eng', 'Colonists': 'Col', 'Military': 'Mil',
     'Embargo': 'Emb', 'Salvage': 'Sal', 'Espionage': 'Esp', 'Relocation': 'Rlo',
-    'Overtime': 'Ovt', 'Genius': 'Gen', 'Propaganda': 'Pro',
+    'Overtime': 'Ovt', 'Flagship': 'Fla', 'Propaganda': 'Pro',
 }
 
 def _abbr(card) -> str:
@@ -36,7 +36,7 @@ def _hand_summary(hand) -> str:
     for c in hand:
         a = _abbr(c)
         counts[a] = counts.get(a, 0) + 1
-    order = ['Eng', 'Col', 'Mil', 'Emb', 'Sal', 'Esp', 'Rlo', 'Ovt', 'Gen', 'Pro']
+    order = ['Eng', 'Col', 'Mil', 'Emb', 'Sal', 'Esp', 'Rlo', 'Ovt', 'Fla', 'Pro']
     return '  '.join(f"{a}×{counts[a]}" for a in order if a in counts)
 
 
