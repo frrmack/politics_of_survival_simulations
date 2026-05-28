@@ -2,14 +2,14 @@ import random
 from abc import ABC, abstractmethod
 
 from card import (Card, Engineers, Colonists, Military,
-                  Embargo, Salvage, Relocation, Overtime, Genius, Propaganda)
+                  Embargo, Salvage, Espionage, Relocation, Overtime, Genius, Propaganda)
 from game import PlayerView
 
 
 # Ordered from most cooperative to most competitive.
-COOPERATION_ORDER = [Engineers, Overtime, Genius, Colonists, Relocation, Salvage, Embargo, Propaganda, Military]
+COOPERATION_ORDER = [Engineers, Overtime, Genius, Colonists, Relocation, Salvage, Espionage, Embargo, Propaganda, Military]
 
-AGGRESSION_ORDER = [Military, Propaganda, Colonists, Relocation, Salvage, Embargo, Genius, Engineers, Overtime]
+AGGRESSION_ORDER = [Military, Propaganda, Colonists, Relocation, Salvage, Espionage, Embargo, Genius, Engineers, Overtime]
 
 class Strategy(ABC):
     """
@@ -31,6 +31,11 @@ class Strategy(ABC):
         return max(neighbors, key=lambda i: view.modules[i].influence[opp] - view.modules[i].influence[p])
 
     def choose_salvage_card(self, _view: PlayerView, _module_idx: int, available: list) -> object:
+        """Default: pick the highest-priority card by cooperation order."""
+        type_rank = {cls: rank for rank, cls in enumerate(COOPERATION_ORDER)}
+        return min(available, key=lambda c: type_rank.get(type(c), 99))
+
+    def choose_espionage_card(self, _view: PlayerView, _module_idx: int, available: list) -> object:
         """Default: pick the highest-priority card by cooperation order."""
         type_rank = {cls: rank for rank, cls in enumerate(COOPERATION_ORDER)}
         return min(available, key=lambda c: type_rank.get(type(c), 99))
@@ -72,6 +77,9 @@ class RandomStrategy(Strategy):
         return self._rng.choice(neighbors)
 
     def choose_salvage_card(self, _view: PlayerView, _module_idx: int, available: list) -> object:
+        return self._rng.choice(available)
+
+    def choose_espionage_card(self, _view: PlayerView, _module_idx: int, available: list) -> object:
         return self._rng.choice(available)
 
 
@@ -121,6 +129,10 @@ class AggressiveStrategy(Strategy):
         return _greedy_assign(module_order, hand_sorted)
 
     def choose_salvage_card(self, _view: PlayerView, _module_idx: int, available: list) -> object:
+        type_rank = {cls: rank for rank, cls in enumerate(AGGRESSION_ORDER)}
+        return min(available, key=lambda c: type_rank.get(type(c), 99))
+
+    def choose_espionage_card(self, _view: PlayerView, _module_idx: int, available: list) -> object:
         type_rank = {cls: rank for rank, cls in enumerate(AGGRESSION_ORDER)}
         return min(available, key=lambda c: type_rank.get(type(c), 99))
 

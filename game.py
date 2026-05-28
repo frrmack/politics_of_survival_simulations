@@ -4,7 +4,7 @@ from typing import Optional
 
 from card import (Card, StandardCard, SpecialCard,
                   Engineers, Colonists, Military,
-                  Embargo, Salvage, Relocation, Overtime, Genius, Propaganda)
+                  Embargo, Salvage, Espionage, Relocation, Overtime, Genius, Propaganda)
 from module import Module
 from config import GameConfig
 
@@ -22,6 +22,7 @@ class Deck:
         cards.extend([Military()]    * config.military_count)
         cards.extend([Embargo()]     * config.embargo_count)
         cards.extend([Salvage()]     * config.salvage_count)
+        cards.extend([Espionage()]   * config.espionage_count)
         cards.extend([Relocation()]  * config.relocation_count)
         cards.extend([Overtime()]    * config.overtime_count)
         cards.extend([Genius()]      * config.genius_count)
@@ -53,9 +54,10 @@ class Deck:
 class RoundRecord:
     """What happened in one round, fully revealed after the Consequences phase."""
     round_num: int
-    deployments: dict = field(default_factory=dict)       # original hand cards
+    deployments: dict = field(default_factory=dict)         # original hand cards
     relocation_targets: dict = field(default_factory=dict)  # (mod_idx, player_idx) -> target_idx
-    salvage_choices: dict = field(default_factory=dict)   # (mod_idx, player_idx) -> chosen card
+    salvage_choices: dict = field(default_factory=dict)     # (mod_idx, player_idx) -> chosen card
+    espionage_choices: dict = field(default_factory=dict)   # (mod_idx, player_idx) -> chosen card
 
 
 @dataclass
@@ -154,21 +156,27 @@ class Game:
         """Run choices, effects, and refill given finalized deployments.
         Called by _play_round() and by the GUI after collecting human choices.
         """
-        relocation_targets, salvage_choices, resolved = self._collect_choices(deployments)
-        self._apply_effects(deployments, relocation_targets, salvage_choices, resolved)
-        self._discard_and_refill(deployments, salvage_used=list(salvage_choices.values()))
+        rel_tgt, sal_ch, esp_ch, esp_used, resolved = self._collect_choices(deployments)
+        self._apply_effects(deployments, rel_tgt, sal_ch, resolved, esp_ch)
+        self._discard_and_refill(deployments,
+                                 salvage_used=list(sal_ch.values()),
+                                 espionage_used=esp_used)
 
     def _collect_choices(self, deployments: list[dict]) -> tuple:
-        """Module-by-module choice collection.
+        """Module-by-module choice collection with full Salvage/Espionage chaining.
 
-        For each module left-to-right: Salvage first (P1 then P2), then Relocation on
-        the now-resolved cards (P1 then P2).  Priority order only governs which special
-        card on the *same* module resolves first — M1 is fully resolved before M2, etc.
+        Priority within a module: Embargo (skip) > Salvage > Espionage > Relocation.
+        P1 before P2 within each type.  Chaining: when a Salvage or Espionage choice
+        resolves to another Salvage/Espionage, that follow-up is inserted immediately
+        after the current item so the entire chain completes before the next special card.
 
-        Returns (relocation_targets, salvage_choices, resolved_deployments).
+        Returns (relocation_targets, salvage_choices, espionage_choices, espionage_used, resolved).
+        espionage_used contains hand-cards removed by Espionage that need to be discarded.
         """
         resolved = [{**dep} for dep in deployments]
         salvage_choices: dict = {}
+        espionage_choices: dict = {}
+        espionage_used: list = []
         relocation_targets: dict = {}
 
         for mod_idx in range(self.config.num_modules):
@@ -176,43 +184,75 @@ class Game:
                isinstance(deployments[1][mod_idx], Embargo):
                 continue
 
-            # Salvage first (P1 then P2)
-            for player_idx in range(2):
-                if isinstance(deployments[player_idx][mod_idx], Salvage):
+            # Per-module choice queue: (player_idx, 'salvage'|'espionage')
+            # Built in priority order: Salvage then Espionage, P1 before P2 each.
+            mod_queue: list = []
+            for cls, tag in [(Salvage, 'salvage'), (Espionage, 'espionage')]:
+                for pi in range(2):
+                    if isinstance(deployments[pi][mod_idx], cls):
+                        mod_queue.append((pi, tag))
+
+            qi = 0
+            while qi < len(mod_queue):
+                pi, tag = mod_queue[qi]
+                if tag == 'salvage':
                     available = list(self.deck._discard)
                     if available:
-                        view = self._make_view(player_idx)
-                        chosen = self.strategies[player_idx].choose_salvage_card(
-                            view, mod_idx, available
-                        )
-                        salvage_choices[(mod_idx, player_idx)] = chosen
-                        resolved[player_idx][mod_idx] = chosen
+                        view = self._make_view(pi)
+                        chosen = self.strategies[pi].choose_salvage_card(
+                            view, mod_idx, available)
+                        salvage_choices[(mod_idx, pi)] = chosen
+                        resolved[pi][mod_idx] = chosen
                         self.deck._discard.remove(chosen)
+                        if isinstance(chosen, Salvage):
+                            mod_queue.insert(qi + 1, (pi, 'salvage'))
+                        elif isinstance(chosen, Espionage):
+                            mod_queue.insert(qi + 1, (pi, 'espionage'))
+                elif tag == 'espionage':
+                    dep_set = list(deployments[pi].values())
+                    hand_copy = list(self.hands[pi])
+                    for dep in dep_set:
+                        if dep in hand_copy:
+                            hand_copy.remove(dep)
+                    available = hand_copy  # non-deployed hand cards
+                    if available:
+                        view = self._make_view(pi)
+                        chosen = self.strategies[pi].choose_espionage_card(
+                            view, mod_idx, available)
+                        espionage_choices[(mod_idx, pi)] = chosen
+                        resolved[pi][mod_idx] = chosen
+                        self.hands[pi].remove(chosen)
+                        espionage_used.append(chosen)
+                        if isinstance(chosen, Salvage):
+                            mod_queue.insert(qi + 1, (pi, 'salvage'))
+                        elif isinstance(chosen, Espionage):
+                            mod_queue.insert(qi + 1, (pi, 'espionage'))
+                qi += 1
 
-            # Relocation second — on resolved cards; re-check for Embargo after Salvage
+            # Relocation — on resolved cards after all chains; re-check for Embargo
             if isinstance(resolved[0][mod_idx], Embargo) or \
                isinstance(resolved[1][mod_idx], Embargo):
                 continue
-            for player_idx in range(2):
-                if isinstance(resolved[player_idx][mod_idx], Relocation):
+            for pi in range(2):
+                if isinstance(resolved[pi][mod_idx], Relocation):
                     neighbors = self._get_neighbors(mod_idx)
                     if len(neighbors) == 1:
                         target = neighbors[0]
                     else:
-                        view = self._make_view(player_idx)
-                        target = self.strategies[player_idx].choose_relocation_target(
-                            view, mod_idx, neighbors
-                        )
-                    relocation_targets[(mod_idx, player_idx)] = target
+                        view = self._make_view(pi)
+                        target = self.strategies[pi].choose_relocation_target(
+                            view, mod_idx, neighbors)
+                    relocation_targets[(mod_idx, pi)] = target
 
-        return relocation_targets, salvage_choices, resolved
+        return relocation_targets, salvage_choices, espionage_choices, espionage_used, resolved
 
     def _apply_effects(self, deployments: list[dict], relocation_targets: dict,
                        salvage_choices: dict | None = None,
-                       resolved_deployments: list[dict] | None = None) -> None:
+                       resolved_deployments: list[dict] | None = None,
+                       espionage_choices: dict | None = None) -> None:
         """Resolve all modules and record the round.
 
-        deployments         — original hand cards (stored in the record for display)
+        deployments          — original hand cards (stored in the record for display)
         resolved_deployments — after Salvage/Espionage substitution (used for resolve_module)
         """
         self._relocation_targets = relocation_targets
@@ -222,6 +262,7 @@ class Game:
             round_num=self.round_num,
             relocation_targets=relocation_targets,
             salvage_choices=salvage_choices or {},
+            espionage_choices=espionage_choices or {},
         )
         for mod_idx, module in enumerate(self.modules):
             record.deployments[mod_idx] = (deployments[0][mod_idx], deployments[1][mod_idx])
@@ -231,11 +272,13 @@ class Game:
         self.history.append(record)
 
     def _discard_and_refill(self, deployments: list[dict],
-                             salvage_used: list | None = None) -> None:
+                             salvage_used: list | None = None,
+                             espionage_used: list | None = None) -> None:
         """Discard played cards and refill hands to hand_size.
 
-        salvage_used — cards taken from the discard pile by Salvage; returned to discard
-                       after their effect is applied so they stay in the cycle.
+        salvage_used   — cards taken from the discard pile by Salvage; returned to discard.
+        espionage_used — cards taken from hand by Espionage; already removed from hand,
+                         just need to be added to the discard pile.
         """
         for player_idx in range(2):
             played = list(deployments[player_idx].values())
@@ -245,6 +288,8 @@ class Game:
 
         if salvage_used:
             self.deck.discard(salvage_used)
+        if espionage_used:
+            self.deck.discard(espionage_used)
 
         refill_order = [0, 1]
         self._rng.shuffle(refill_order)

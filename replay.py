@@ -13,7 +13,7 @@ import random
 
 from config import GameConfig
 from game import Game, RoundRecord
-from card import Military, Embargo, Salvage, Relocation
+from card import Military, Embargo, Salvage, Espionage, Relocation
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
                       RandomStrategy, BalancedStrategy)
 
@@ -24,7 +24,7 @@ from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
 
 _ABBR = {
     'Engineers': 'Eng', 'Colonists': 'Col', 'Military': 'Mil',
-    'Embargo': 'Emb', 'Salvage': 'Sal', 'Relocation': 'Rlo',
+    'Embargo': 'Emb', 'Salvage': 'Sal', 'Espionage': 'Esp', 'Relocation': 'Rlo',
     'Overtime': 'Ovt', 'Genius': 'Gen', 'Propaganda': 'Pro',
 }
 
@@ -36,7 +36,7 @@ def _hand_summary(hand) -> str:
     for c in hand:
         a = _abbr(c)
         counts[a] = counts.get(a, 0) + 1
-    order = ['Eng', 'Col', 'Mil', 'Emb', 'Sal', 'Rlo', 'Ovt', 'Gen', 'Pro']
+    order = ['Eng', 'Col', 'Mil', 'Emb', 'Sal', 'Esp', 'Rlo', 'Ovt', 'Gen', 'Pro']
     return '  '.join(f"{a}×{counts[a]}" for a in order if a in counts)
 
 
@@ -71,12 +71,12 @@ class ReplayGame(Game):
 
         # Deployment and choice collection
         deployments = self._collect_deployments()
-        relocation_targets, salvage_choices, resolved = self._collect_choices(deployments)
+        rel_tgt, sal_ch, esp_ch, esp_used, resolved = self._collect_choices(deployments)
 
         # Resolution with per-module tracing
-        self._relocation_targets = relocation_targets
-        record = RoundRecord(round_num=rn, relocation_targets=relocation_targets,
-                             salvage_choices=salvage_choices)
+        self._relocation_targets = rel_tgt
+        record = RoundRecord(round_num=rn, relocation_targets=rel_tgt,
+                             salvage_choices=sal_ch, espionage_choices=esp_ch)
         print("\n  Resolution:")
         for mod_idx, module in enumerate(self.modules):
             c1 = deployments[0][mod_idx]
@@ -109,29 +109,47 @@ class ReplayGame(Game):
             else:
                 for pi, orig in [(0, c1), (1, c2)]:
                     if isinstance(orig, Salvage):
-                        chosen = salvage_choices.get((mod_idx, pi))
+                        chosen = sal_ch.get((mod_idx, pi))
                         notes.append(f"P{pi+1} Sal→{_abbr(chosen) if chosen else 'none'}")
+                    elif isinstance(orig, Espionage):
+                        chosen = esp_ch.get((mod_idx, pi))
+                        notes.append(f"P{pi+1} Esp→{_abbr(chosen) if chosen else 'none'}")
                 rlo_parts = []
                 for pi, c in [(0, r1), (1, r2)]:
                     if isinstance(c, Relocation):
-                        t = relocation_targets.get((mod_idx, pi))
+                        t = rel_tgt.get((mod_idx, pi))
                         if t is not None:
                             rlo_parts.append(f"P{pi+1}→M{t+1}")
                 if rlo_parts:
                     notes.append(f"Rlo: {', '.join(rlo_parts)}")
             note_str = f"  [{', '.join(notes)}]" if notes else ""
 
-            # Show resolved card if Salvage substituted something
-            def display(orig, res):
-                return f"{_abbr(orig)}→{_abbr(res)}" if orig is not res else _abbr(orig)
+            # Build display string following the full chain
+            def chain_str(orig, pi):
+                parts = [_abbr(orig)]
+                cur = orig
+                while True:
+                    if isinstance(cur, Salvage):
+                        nxt = sal_ch.get((mod_idx, pi))
+                        if nxt is None: break
+                        parts.append(_abbr(nxt)); cur = nxt
+                    elif isinstance(cur, Espionage):
+                        nxt = esp_ch.get((mod_idx, pi))
+                        if nxt is None: break
+                        parts.append(_abbr(nxt)); cur = nxt
+                    else:
+                        break
+                return '→'.join(parts)
 
             status = "READY" if module.is_ready else f"need +{module.READY_THRESHOLD - module.dev_level}"
-            print(f"    M{mod_idx+1}  P1: {display(c1,r1):<7}  P2: {display(c2,r2):<7}"
+            print(f"    M{mod_idx+1}  P1: {chain_str(c1,0):<10}  P2: {chain_str(c2,1):<10}"
                   f"  →  {'  '.join(effects):<26}"
                   f"   [{status:>8}   P1= {module.influence[0]:>2}  P2= {module.influence[1]:>2}]   {note_str}")
 
         self.history.append(record)
-        self._discard_and_refill(deployments, salvage_used=list(salvage_choices.values()))
+        self._discard_and_refill(deployments,
+                                 salvage_used=list(sal_ch.values()),
+                                 espionage_used=esp_used)
 
         # Hands after redraw
         print("\n  Hands after redraw:")

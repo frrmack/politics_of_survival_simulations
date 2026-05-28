@@ -16,7 +16,7 @@ import pygame
 
 from config import GameConfig
 from card import (Card, Engineers, Colonists, Military,
-                  Embargo, Salvage, Relocation, Overtime, Genius, Propaganda)
+                  Embargo, Salvage, Espionage, Relocation, Overtime, Genius, Propaganda)
 from module import Module
 from game import Game, PlayerView, RoundRecord
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
@@ -51,6 +51,7 @@ CARD_COLORS = {
     Military:   (180,  40,  40),
     Embargo:    (90,  100, 120),
     Salvage:    (20,  150, 150),
+    Espionage:  (100,  30,  60),
     Relocation: (180, 110,  20),
     Overtime:   (20,  160,  90),
     Genius:     (180, 150,  20),
@@ -63,6 +64,7 @@ CARD_ABBR = {
     Military:   "MIL",
     Embargo:    "EMB",
     Salvage:    "SAL",
+    Espionage:  "ESP",
     Relocation: "RLO",
     Overtime:   "OVT",
     Genius:     "GEN",
@@ -75,6 +77,7 @@ CARD_EFFECT = {
     Military:   ("+2 inf", "(-1 dev vs MIL)"),
     Embargo:    ("freeze module", "rival irrelevant"),
     Salvage:    ("pick from discard", "play it here"),
+    Espionage:  ("pick from hand", "play it here"),
     Relocation: ("-1 inf here", "+1 inf neighbor"),
     Overtime:   ("+2 dev", ""),
     Genius:     ("+1 inf", "+1 dev"),
@@ -90,6 +93,7 @@ ROUND_START        = "ROUND_START"
 DEPLOY             = "DEPLOY"
 PASS_SCREEN        = "PASS_SCREEN"
 CHOOSE_SALVAGE     = "CHOOSE_SALVAGE"
+CHOOSE_ESPIONAGE   = "CHOOSE_ESPIONAGE"
 CHOOSE_RELOCATION  = "CHOOSE_RELOCATION"
 CONSEQUENCES       = "CONSEQUENCES"
 GAME_OVER          = "GAME_OVER"
@@ -466,8 +470,10 @@ class App:
         self.current_deployments = None
         self.resolved_deployments = None
         self.collected_salvage_choices = {}       # {(mod_idx, player_idx): chosen_card}
+        self.collected_espionage_choices = {}     # {(mod_idx, player_idx): chosen_card}
+        self.espionage_used_cards = []            # hand-cards removed by Espionage; need discarding
         self.collected_relocation_targets = {}    # {(mod_idx, player_idx): target_idx}
-        # Unified left-to-right choice queue: ('salvage', pi, mod) or ('relocation', pi, mod, neighbors)
+        # Unified left-to-right choice queue
         self.pending_choices = []
         self.current_choice_idx = 0
 
@@ -529,10 +535,11 @@ class App:
         self.current_deployments = g._collect_deployments()
         self.resolved_deployments = [{**dep} for dep in self.current_deployments]
         self.collected_salvage_choices = {}
+        self.collected_espionage_choices = {}
+        self.espionage_used_cards = []
         self.collected_relocation_targets = {}
 
-        # Build unified choice queue: module by module, Salvage before Relocation within
-        # each module (priority order only governs same-module ordering).
+        # Unified queue: module by module, priority within module: Salvage > Espionage > Relocation
         self.pending_choices = []
         for mod_idx in range(g.config.num_modules):
             c1 = self.current_deployments[0][mod_idx]
@@ -542,6 +549,9 @@ class App:
             for player_idx in range(2):
                 if isinstance(self.current_deployments[player_idx][mod_idx], Salvage):
                     self.pending_choices.append(('salvage', player_idx, mod_idx))
+            for player_idx in range(2):
+                if isinstance(self.current_deployments[player_idx][mod_idx], Espionage):
+                    self.pending_choices.append(('espionage', player_idx, mod_idx))
             for player_idx in range(2):
                 if isinstance(self.current_deployments[player_idx][mod_idx], Relocation):
                     neighbors = g._get_neighbors(mod_idx)
@@ -553,21 +563,50 @@ class App:
         self.current_choice_idx = 0
         self._advance_choices()
 
-    def _apply_salvage(self, player_idx, mod_idx, chosen):
-        """Record a Salvage resolution and insert a Relocation choice if needed."""
+    def _espionage_available(self, player_idx):
+        """Non-deployed hand cards available to pick for Espionage."""
         g = self.game
-        self.collected_salvage_choices[(mod_idx, player_idx)] = chosen
-        self.resolved_deployments[player_idx][mod_idx] = chosen
-        g.deck._discard.remove(chosen)
-        if isinstance(chosen, Relocation):
+        deployed = list(self.current_deployments[player_idx].values())
+        available = list(g.hands[player_idx])
+        for dep in deployed:
+            if dep in available:
+                available.remove(dep)
+        return available
+
+    def _insert_followup_choice(self, player_idx, mod_idx):
+        """If the resolved card at (player_idx, mod_idx) requires a choice, insert it next."""
+        g = self.game
+        card = self.resolved_deployments[player_idx][mod_idx]
+        if isinstance(card, Salvage):
+            if list(g.deck._discard):
+                self.pending_choices.insert(self.current_choice_idx + 1,
+                                            ('salvage', player_idx, mod_idx))
+        elif isinstance(card, Espionage):
+            if self._espionage_available(player_idx):
+                self.pending_choices.insert(self.current_choice_idx + 1,
+                                            ('espionage', player_idx, mod_idx))
+        elif isinstance(card, Relocation):
             neighbors = g._get_neighbors(mod_idx)
             if len(neighbors) == 1:
                 self.collected_relocation_targets[(mod_idx, player_idx)] = neighbors[0]
             else:
-                self.pending_choices.insert(
-                    self.current_choice_idx + 1,
-                    ('relocation', player_idx, mod_idx, neighbors)
-                )
+                self.pending_choices.insert(self.current_choice_idx + 1,
+                                            ('relocation', player_idx, mod_idx, neighbors))
+
+    def _apply_salvage(self, player_idx, mod_idx, chosen):
+        g = self.game
+        self.collected_salvage_choices[(mod_idx, player_idx)] = chosen
+        self.resolved_deployments[player_idx][mod_idx] = chosen
+        g.deck._discard.remove(chosen)
+        self._insert_followup_choice(player_idx, mod_idx)
+
+    def _apply_espionage(self, player_idx, mod_idx, chosen):
+        g = self.game
+        self.collected_espionage_choices[(mod_idx, player_idx)] = chosen
+        self.resolved_deployments[player_idx][mod_idx] = chosen
+        g.hands[player_idx].remove(chosen)
+        self.espionage_used_cards.append(chosen)
+        self._insert_followup_choice(player_idx, mod_idx)
 
     def _advance_choices(self):
         """Process the next queued choice: resolve AI immediately, pause for human."""
@@ -587,6 +626,19 @@ class App:
                 chosen = g.strategies[player_idx].choose_salvage_card(view, mod_idx, available)
                 self._apply_salvage(player_idx, mod_idx, chosen)
                 self.current_choice_idx += 1
+            elif choice[0] == 'espionage':
+                _, player_idx, mod_idx = choice
+                available = self._espionage_available(player_idx)
+                if not available:
+                    self.current_choice_idx += 1
+                    continue
+                if player_idx in self.human_players:
+                    self.state = CHOOSE_ESPIONAGE
+                    return
+                view = g._make_view(player_idx)
+                chosen = g.strategies[player_idx].choose_espionage_card(view, mod_idx, available)
+                self._apply_espionage(player_idx, mod_idx, chosen)
+                self.current_choice_idx += 1
             elif choice[0] == 'relocation':
                 _, player_idx, mod_idx, neighbors = choice
                 if player_idx in self.human_players:
@@ -602,9 +654,11 @@ class App:
         """Apply all pre-collected choices, snapshot results, and go to CONSEQUENCES."""
         g = self.game
         g._apply_effects(self.current_deployments, self.collected_relocation_targets,
-                         self.collected_salvage_choices, self.resolved_deployments)
+                         self.collected_salvage_choices, self.resolved_deployments,
+                         self.collected_espionage_choices)
         g._discard_and_refill(self.current_deployments,
-                              salvage_used=list(self.collected_salvage_choices.values()))
+                              salvage_used=list(self.collected_salvage_choices.values()),
+                              espionage_used=self.espionage_used_cards)
         after = snapshot_modules(g.modules)
         record = g.history[-1]
         self.consequences_data = (self.modules_before, after, record)
@@ -790,10 +844,11 @@ class App:
                            played_cards=played_cards,
                            relocation_source=mod_idx,
                            played_relocation_targets=self.collected_relocation_targets,
-                           played_salvage_choices=self.collected_salvage_choices)
+                           played_salvage_choices=self.collected_salvage_choices,
+                           played_espionage_choices=self.collected_espionage_choices)
 
         # Compute discard label Y dynamically to avoid overlap with module cards
-        _has_chain = bool(self.collected_salvage_choices)
+        _has_chain = bool(self.collected_salvage_choices or self.collected_espionage_choices)
         _chain_slots = 2 if _has_chain else 1
         _card_band = _chain_slots * (MINI_H + MINI_GAP)
         _box_top = _module_top + _card_band
@@ -833,6 +888,78 @@ class App:
                 return
 
     # ------------------------------------------------------------------
+    # CHOOSE_ESPIONAGE state
+    # ------------------------------------------------------------------
+
+    def _draw_choose_espionage(self):
+        s = self.screen
+        s.fill(BG)
+        g = self.game
+        _, player_idx, mod_idx = self.pending_choices[self.current_choice_idx]
+        p_color = P1_COLOR if player_idx == 0 else P2_COLOR
+        available = self._espionage_available(player_idx)
+
+        draw_multicolor_text(s,
+            [(f"Round {g.round_num} — ", WHITE),
+             (f"Player {player_idx+1}: ", p_color),
+             ("Choose a Card to Play via Espionage", WHITE)],
+            self.f_title, 38, W//2)
+        draw_text(s,
+                  f"You deployed Espionage to Module {mod_idx+1}. "
+                  f"Pick any card from your hand to play here instead.",
+                  self.f_body, GREY, W//2, 74)
+
+        played_cards = {
+            mi: (self.current_deployments[0][mi], self.current_deployments[1][mi])
+            for mi in range(g.config.num_modules)
+        }
+        _module_top = 100
+        self._draw_modules(s, top=_module_top, interactive=False, small_die=True,
+                           played_cards=played_cards,
+                           relocation_source=mod_idx,
+                           played_relocation_targets=self.collected_relocation_targets,
+                           played_salvage_choices=self.collected_salvage_choices,
+                           played_espionage_choices=self.collected_espionage_choices)
+
+        _has_chain = bool(self.collected_salvage_choices or self.collected_espionage_choices)
+        _chain_slots = 2 if _has_chain else 1
+        _card_band = _chain_slots * (MINI_H + MINI_GAP)
+        _box_top = _module_top + _card_band
+        _slot_h = 60 + 65
+        cards_label_y = _box_top + _slot_h + _chain_slots * (MINI_H + MINI_GAP) + 25
+
+        draw_text(s, f"Your hand — {len(available)} card(s) available:",
+                  self.f_h3, p_color, 40, cards_label_y, anchor="topleft")
+
+        self._espionage_card_rects = {}
+        cw, ch, gap = 72, 104, 8
+        per_row = max(1, (W - 40) // (cw + gap))
+        for ci, card in enumerate(available):
+            col = ci % per_row
+            row = ci // per_row
+            cx = 40 + col * (cw + gap)
+            cy = cards_label_y + 25 + row * (ch + gap)
+            r = draw_card(s, card, cx, cy, small=True)
+            self._espionage_card_rects[ci] = (r, card)
+
+        if not available:
+            draw_text(s, "(no cards left in hand — Espionage will have no effect)",
+                      self.f_body, DARK_GREY, W//2, cards_label_y + 30)
+
+    def _handle_choose_espionage(self, event):
+        if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
+            return
+        if not hasattr(self, '_espionage_card_rects'):
+            return
+        _, player_idx, mod_idx = self.pending_choices[self.current_choice_idx]
+        for ci, (r, card) in self._espionage_card_rects.items():
+            if r.collidepoint(event.pos):
+                self._apply_espionage(player_idx, mod_idx, card)
+                self.current_choice_idx += 1
+                self._advance_choices()
+                return
+
+    # ------------------------------------------------------------------
     # CHOOSE_RELOCATION state
     # ------------------------------------------------------------------
 
@@ -863,7 +990,8 @@ class App:
                            relocation_source=mod_idx,
                            relocation_targets=neighbors,
                            played_relocation_targets=self.collected_relocation_targets,
-                           played_salvage_choices=self.collected_salvage_choices)
+                           played_salvage_choices=self.collected_salvage_choices,
+                           played_espionage_choices=self.collected_espionage_choices)
 
         draw_text(s, "Click a highlighted module to relocate your influence there.",
                   self.f_body, GOLD, W//2, H - 50)
@@ -898,7 +1026,8 @@ class App:
         self._draw_modules(s, top=188, interactive=False,
                            played_cards=record.deployments, before_state=before,
                            played_relocation_targets=record.relocation_targets,
-                           played_salvage_choices=record.salvage_choices)
+                           played_salvage_choices=record.salvage_choices,
+                           played_espionage_choices=record.espionage_choices)
 
         # Button
         last_round = g.round_num >= g.config.num_rounds or g.game_over
@@ -970,7 +1099,8 @@ class App:
                       before_state=None,
                       relocation_source=None, relocation_targets=None,
                       played_relocation_targets=None,
-                      played_salvage_choices=None):
+                      played_salvage_choices=None,
+                      played_espionage_choices=None):
         g = self.game
         n = g.config.num_modules
         die_sz   = 60 if small_die else 80
@@ -980,9 +1110,30 @@ class App:
         total_w  = spacing * n
         start_x  = (W - total_w) // 2
 
-        # card_band grows by one slot if any Salvage chain adds a second card
-        has_salvage_chain = bool(played_cards and played_salvage_choices)
-        chain_slots = 2 if has_salvage_chain else 1
+        # Compute max chain depth across all P2 slots (they extend upward into card_band).
+        def _chain(orig, mi, pi):
+            """Follow Salvage/Espionage chain from orig; return list of cards."""
+            cards = [orig]
+            cur = orig
+            while True:
+                if isinstance(cur, Salvage) and played_salvage_choices:
+                    nxt = played_salvage_choices.get((mi, pi))
+                    if nxt is not None:
+                        cards.append(nxt); cur = nxt; continue
+                if isinstance(cur, Espionage) and played_espionage_choices:
+                    nxt = played_espionage_choices.get((mi, pi))
+                    if nxt is not None:
+                        cards.append(nxt); cur = nxt; continue
+                break
+            return cards
+
+        chain_slots = 1
+        if played_cards:
+            for mi in range(n):
+                if mi in played_cards:
+                    _, c2 = played_cards[mi]
+                    if c2:
+                        chain_slots = max(chain_slots, len(_chain(c2, mi, 1)))
         card_band = chain_slots * (MINI_H + MINI_GAP) if played_cards else 0
         box_top  = top + card_band
 
@@ -1061,22 +1212,11 @@ class App:
                 c1, c2 = played_cards[mi]
                 rlo_font = make_font(11, bold=True)
                 rlo_color = CARD_COLORS[Relocation]
-
-                def _chain(orig, player_idx):
-                    """Return list of cards to display for one player's slot (orig, then chosen)."""
-                    cards = [orig]
-                    if played_salvage_choices and isinstance(orig, Salvage):
-                        chosen = played_salvage_choices.get((mi, player_idx))
-                        if chosen is not None:
-                            cards.append(chosen)
-                    return cards
-
                 slot_h_card = MINI_H + MINI_GAP
 
                 # P2 above: chain[0]=original closest to box, chain[-1]=resolved furthest up
                 if c2:
-                    chain2 = _chain(c2, 1)
-                    for ci, card in enumerate(chain2):
+                    for ci, card in enumerate(_chain(c2, mi, 1)):
                         cy = box_top - MINI_GAP - MINI_H // 2 - ci * slot_h_card
                         draw_mini_card(surf, card, cx, cy)
                         if played_relocation_targets and isinstance(card, Relocation):
@@ -1088,8 +1228,7 @@ class App:
 
                 # P1 below: chain[0]=original closest to box, chain[-1]=resolved furthest down
                 if c1:
-                    chain1 = _chain(c1, 0)
-                    for ci, card in enumerate(chain1):
+                    for ci, card in enumerate(_chain(c1, mi, 0)):
                         cy = box_top + slot_h + MINI_GAP + MINI_H // 2 + ci * slot_h_card
                         draw_mini_card(surf, card, cx, cy)
                         if played_relocation_targets and isinstance(card, Relocation):
@@ -1126,6 +1265,8 @@ class App:
                     self._handle_pass_screen(event)
                 elif self.state == CHOOSE_SALVAGE:
                     self._handle_choose_salvage(event)
+                elif self.state == CHOOSE_ESPIONAGE:
+                    self._handle_choose_espionage(event)
                 elif self.state == CHOOSE_RELOCATION:
                     self._handle_choose_relocation(event)
                 elif self.state == CONSEQUENCES:
@@ -1149,6 +1290,8 @@ class App:
                 self._draw_pass_screen()
             elif self.state == CHOOSE_SALVAGE:
                 self._draw_choose_salvage()
+            elif self.state == CHOOSE_ESPIONAGE:
+                self._draw_choose_espionage()
             elif self.state == CHOOSE_RELOCATION:
                 self._draw_choose_relocation()
             elif self.state == CONSEQUENCES:

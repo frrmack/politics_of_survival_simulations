@@ -83,6 +83,14 @@ class Salvage(SpecialCard):
 
 
 @dataclass(frozen=True)
+class Espionage(SpecialCard):
+    def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
+        # _apply_effects substitutes the chosen card before calling resolve_module,
+        # so this method is never reached in normal play.
+        pass
+
+
+@dataclass(frozen=True)
 class Relocation(SpecialCard):
     def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
         target_idx = game._relocation_targets.get((module.index, player_idx))
