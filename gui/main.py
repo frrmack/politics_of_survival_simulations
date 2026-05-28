@@ -651,14 +651,14 @@ class App:
         self._finish_round()
 
     def _finish_round(self):
-        """Apply all pre-collected choices, snapshot results, and go to CONSEQUENCES."""
+        """Apply all pre-collected choices, snapshot results, and go to CONSEQUENCES.
+        _discard_and_refill is intentionally deferred to _handle_consequences so the
+        Consequences screen shows the pre-draw state (hands at 3, piles unchanged).
+        """
         g = self.game
         g._apply_effects(self.current_deployments, self.collected_relocation_targets,
                          self.collected_salvage_choices, self.resolved_deployments,
                          self.collected_espionage_choices)
-        g._discard_and_refill(self.current_deployments,
-                              salvage_used=list(self.collected_salvage_choices.values()),
-                              espionage_used=self.espionage_used_cards)
         after = snapshot_modules(g.modules)
         record = g.history[-1]
         self.consequences_data = (self.modules_before, after, record)
@@ -1040,6 +1040,10 @@ class App:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self._next_btn.collidepoint(event.pos):
                 g = self.game
+                # Draw phase runs here: discard played cards, refill hands to 8.
+                g._discard_and_refill(self.current_deployments,
+                                      salvage_used=list(self.collected_salvage_choices.values()),
+                                      espionage_used=self.espionage_used_cards)
                 if g.round_num >= g.config.num_rounds or g.game_over:
                     self.state = GAME_OVER
                 else:
@@ -1302,9 +1306,26 @@ class App:
             # Persistent card counts — bottom-right, visible in all game states
             if self.state != SETUP and hasattr(self, 'game'):
                 g = self.game
+                # In states between deployment-collection and _discard_and_refill,
+                # the 5 deployed cards per player are still physically in g.hands.
+                # Subtract them so the display shows truly available cards.
+                # Outside those states (ROUND_START, DEPLOY, GAME_OVER) hands are
+                # already correct and current_deployments is stale — don't subtract,
+                # because refilled cards of the same type would be falsely matched.
+                _mid_round = self.state in (
+                    CHOOSE_SALVAGE, CHOOSE_ESPIONAGE, CHOOSE_RELOCATION, CONSEQUENCES)
+                def _eff_hand(pi):
+                    pool = list(g.hands[pi])
+                    if _mid_round:
+                        deps = getattr(self, 'current_deployments', None)
+                        if deps:
+                            for c in deps[pi].values():
+                                if c in pool:
+                                    pool.remove(c)
+                    return len(pool)
                 stats = [
-                    ("P1 Hand",      len(g.hands[0])),
-                    ("P2 Hand",      len(g.hands[1])),
+                    ("P1 Hand",      _eff_hand(0)),
+                    ("P2 Hand",      _eff_hand(1)),
                     ("Draw Pile",    len(g.deck._draw)),
                     ("Discard Pile", len(g.deck._discard)),
                 ]
