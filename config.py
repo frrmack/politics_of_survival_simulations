@@ -38,7 +38,7 @@ class GameConfig:
     espionage_count: int = 1
     relocation_count: int = 1
     overtime_count: int = 1
-    flagship_count: int = 1
+    summit_count: int = 1
     propaganda_count: int = 1
 
 
@@ -53,6 +53,6 @@ class GameConfig:
             + self.espionage_count
             + self.relocation_count
             + self.overtime_count
-            + self.flagship_count
+            + self.summit_count
             + self.propaganda_count
         )

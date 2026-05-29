@@ -2,14 +2,14 @@ import random
 from abc import ABC, abstractmethod
 
 from card import (Card, Engineers, Colonists, Military,
-                  Embargo, Salvage, Espionage, Relocation, Overtime, Flagship, Propaganda)
+                  Embargo, Salvage, Espionage, Relocation, Overtime, Summit, Propaganda)
 from game import PlayerView
 
 
 # Ordered from most cooperative to most competitive.
-COOPERATION_ORDER = [Engineers, Overtime, Flagship, Colonists, Relocation, Salvage, Espionage, Embargo, Propaganda, Military]
+COOPERATION_ORDER = [Engineers, Overtime, Summit, Colonists, Relocation, Salvage, Espionage, Embargo, Propaganda, Military]
 
-AGGRESSION_ORDER = [Military, Propaganda, Colonists, Relocation, Salvage, Espionage, Embargo, Flagship, Engineers, Overtime]
+AGGRESSION_ORDER = [Military, Propaganda, Colonists, Relocation, Salvage, Espionage, Embargo, Summit, Engineers, Overtime]
 
 class Strategy(ABC):
     """
@@ -85,7 +85,7 @@ class RandomStrategy(Strategy):
 
 class CooperativeStrategy(Strategy):
     """
-    Prefers Engineers and Flagship; sends them to the least-developed modules.
+    Prefers Engineers and Summit; sends them to the least-developed modules.
     Prioritizes ship completion over personal influence gain.
     """
 
@@ -140,7 +140,7 @@ class AggressiveStrategy(Strategy):
 class BalancedStrategy(Strategy):
     """
     Tries to match each card to the module where it does the most good:
-    - Engineers/Flagship to modules that urgently need development
+    - Engineers/Summit to modules that urgently need development
     - Military/Colonists to modules where we're behind in influence
     Uses greedy (module, card) pair scoring so the 2 held-back cards
     are whichever pair produces the lowest marginal value.
@@ -159,14 +159,14 @@ class BalancedStrategy(Strategy):
             dev_value = {
                 Engineers: 1.0,
                 Overtime:  2.0,
-                Flagship:    1.0,
+                Summit:    1.0,
             }.get(type(card), 0.0)
 
             inf_value = {
                 Military:   2.0,
                 Propaganda: 2.0,
                 Colonists:  1.0,
-                Flagship:     1.0,
+                Summit:     1.0,
                 Engineers:  0.0,
             }.get(type(card), 0.0)
 

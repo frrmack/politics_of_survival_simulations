@@ -16,7 +16,7 @@ import pygame
 
 from config import GameConfig
 from card import (Card, Engineers, Colonists, Military,
-                  Embargo, Salvage, Espionage, Relocation, Overtime, Flagship, Propaganda)
+                  Embargo, Salvage, Espionage, Relocation, Overtime, Summit, Propaganda)
 from module import Module
 from game import Game, PlayerView, RoundRecord
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
@@ -54,7 +54,7 @@ CARD_COLORS = {
     Espionage:  (100,  30,  60),
     Relocation: (180, 110,  20),
     Overtime:   (20,  160,  90),
-    Flagship:     (180, 150,  20),
+    Summit:     (180, 150,  20),
     Propaganda: (140,  50, 180),
 }
 
@@ -67,7 +67,7 @@ CARD_ABBR = {
     Espionage:  "ESP",
     Relocation: "RLO",
     Overtime:   "OVT",
-    Flagship:     "FLA",
+    Summit:     "FLA",
     Propaganda: "PRO",
 }
 
@@ -80,7 +80,7 @@ CARD_EFFECT = {
     Espionage:  ("pick from hand", "play it here"),
     Relocation: ("-1 inf here", "+1 inf neighbor"),
     Overtime:   ("+2 dev", ""),
-    Flagship:     ("+1 inf", "+1 dev"),
+    Summit:     ("+1 inf", "+1 dev"),
     Propaganda: ("+2 inf", ""),
 }
 
