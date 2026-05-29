@@ -2,14 +2,14 @@ import random
 from abc import ABC, abstractmethod
 
 from card import (Card, Engineers, Colonists, Military,
-                  Embargo, Salvage, Espionage, Relocation, Overtime, Summit, Propaganda)
+                  Embargo, Salvage, Espionage, Relocation, Overtime, Summit, Propaganda, Occupation)
 from game import PlayerView
 
 
 # Ordered from most cooperative to most competitive.
-COOPERATION_ORDER = [Engineers, Overtime, Summit, Colonists, Relocation, Salvage, Espionage, Embargo, Propaganda, Military]
+COOPERATION_ORDER = [Engineers, Overtime, Summit, Colonists, Relocation, Salvage, Espionage, Embargo, Propaganda, Military, Occupation]
 
-AGGRESSION_ORDER = [Military, Propaganda, Colonists, Relocation, Salvage, Espionage, Embargo, Summit, Engineers, Overtime]
+AGGRESSION_ORDER = [Occupation, Military, Propaganda, Colonists, Relocation, Salvage, Espionage, Embargo, Summit, Engineers, Overtime]
 
 class Strategy(ABC):
     """
@@ -163,6 +163,7 @@ class BalancedStrategy(Strategy):
             }.get(type(card), 0.0)
 
             inf_value = {
+                Occupation: 3.0,
                 Military:   2.0,
                 Propaganda: 2.0,
                 Colonists:  1.0,

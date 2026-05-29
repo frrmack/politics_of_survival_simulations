@@ -117,3 +117,10 @@ class Propaganda(SpecialCard):
     def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
         module.add_influence(player_idx, 2)
 
+
+@dataclass(frozen=True)
+class Occupation(SpecialCard):
+    def resolve(self, module: 'Module', player_idx: int, game: 'Game') -> None:
+        module.add_influence(player_idx, 3)
+        module.adjust_dev(-3)
+

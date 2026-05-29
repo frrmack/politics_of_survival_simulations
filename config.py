@@ -40,6 +40,7 @@ class GameConfig:
     overtime_count: int = 1
     summit_count: int = 1
     propaganda_count: int = 1
+    occupation_count: int = 1
 
 
     @property
@@ -55,4 +56,5 @@ class GameConfig:
             + self.overtime_count
             + self.summit_count
             + self.propaganda_count
+            + self.occupation_count
         )

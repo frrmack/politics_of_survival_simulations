@@ -4,7 +4,7 @@ from typing import Optional
 
 from card import (Card, StandardCard, SpecialCard,
                   Engineers, Colonists, Military,
-                  Embargo, Salvage, Espionage, Relocation, Overtime, Summit, Propaganda)
+                  Embargo, Salvage, Espionage, Relocation, Overtime, Summit, Propaganda, Occupation)
 from module import Module
 from config import GameConfig
 
@@ -27,6 +27,7 @@ class Deck:
         cards.extend([Overtime()]    * config.overtime_count)
         cards.extend([Summit()]        * config.summit_count)
         cards.extend([Propaganda()]  * config.propaganda_count)
+        cards.extend([Occupation()]  * config.occupation_count)
         self._rng.shuffle(cards)
         self._draw: list = cards
         self._discard: list = []
