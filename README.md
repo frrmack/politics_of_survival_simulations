@@ -6,6 +6,7 @@ The code in this repository simulates gameplay to playtest and help optimize the
 
 It also includes a simple video game prototype of it, implemented in pygame.
 This interactive game allows
-A) Two players playing against each other by passing the device
-B) One player playing against an AI with a chosen strategy
-C) Watching two AIs with chosen strategies play against each other
+
+- Two players playing against each other by passing the device
+- One player playing against an AI with a chosen strategy
+- Watching two AIs with chosen strategies play against each other
