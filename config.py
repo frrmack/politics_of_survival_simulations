@@ -40,7 +40,7 @@ class GameConfig:
     overtime_count: int = 1
     summit_count: int = 1
     propaganda_count: int = 1
-    occupation_count: int = 1
+    occupation_count: int = 0
 
 
     @property
