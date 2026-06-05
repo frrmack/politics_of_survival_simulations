@@ -20,7 +20,7 @@ from card import (Card, Engineers, Colonists, Military,
 from module import Module
 from game import Game, PlayerView, ResolutionView, RoundRecord
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
-                      BalancedStrategy, RandomStrategy)
+                      BalancedStrategy, LookaheadStrategy)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -102,7 +102,7 @@ CONSEQUENCES       = "CONSEQUENCES"
 GAME_OVER          = "GAME_OVER"
 
 PLAYER_NAMES = ["Player 1", "Player 2"]
-STRATEGY_LABELS = ["Human", "Cooperative", "Aggressive", "Balanced", "Random"]
+STRATEGY_LABELS = ["Human", "Cooperative", "Aggressive", "Balanced", "Lookahead"]
 
 # ---------------------------------------------------------------------------
 # HumanStrategy
@@ -457,7 +457,7 @@ class App:
             elif t == 3:
                 strategies.append(BalancedStrategy())
             else:
-                strategies.append(RandomStrategy())
+                strategies.append(LookaheadStrategy())
 
         self.game = Game(config, strategies, rng=random.Random())
         self.human_players = {pi for pi, _ in self.human_strategies}
