@@ -22,23 +22,23 @@ def main():
 
     print("\n=== Politics of Survival — Baseline (5 modules, 5 rounds) ===\n")
 
-    matchup(config, RandomStrategy(),      RandomStrategy())
-    matchup(config, CooperativeStrategy(), RandomStrategy())
-    matchup(config, CooperativeStrategy(), CooperativeStrategy())
-    matchup(config, CooperativeStrategy(), BalancedStrategy())
-    matchup(config, CooperativeStrategy(), AggressiveStrategy())
-    matchup(config, BalancedStrategy(),    RandomStrategy())
-    matchup(config, BalancedStrategy(),    BalancedStrategy())
-    matchup(config, BalancedStrategy(),    AggressiveStrategy())
-    matchup(config, AggressiveStrategy(),  RandomStrategy())
-    matchup(config, AggressiveStrategy(),  AggressiveStrategy())
+    #matchup(config, RandomStrategy(),      RandomStrategy())
+    #matchup(config, CooperativeStrategy(), RandomStrategy())
+    #matchup(config, CooperativeStrategy(), CooperativeStrategy())
+    #matchup(config, CooperativeStrategy(), BalancedStrategy())
+    #matchup(config, CooperativeStrategy(), AggressiveStrategy())
+    #matchup(config, BalancedStrategy(),    RandomStrategy())
+    #matchup(config, BalancedStrategy(),    BalancedStrategy())
+    #matchup(config, BalancedStrategy(),    AggressiveStrategy())
+    #matchup(config, AggressiveStrategy(),  RandomStrategy())
+    #matchup(config, AggressiveStrategy(),  AggressiveStrategy())
 
-    print("\n=== Lookahead matchups (n=100; raise for tighter intervals) ===\n")
+    #print("\n=== Lookahead matchups (n=100; raise for tighter intervals) ===\n")
 
-    matchup(config, LookaheadStrategy(),   BalancedStrategy(),     n=100)
-    matchup(config, LookaheadStrategy(),   CooperativeStrategy(),  n=100)
-    matchup(config, LookaheadStrategy(),   AggressiveStrategy(),   n=100)
-    matchup(config, LookaheadStrategy(),   LookaheadStrategy(),    n=100)
+    matchup(config, LookaheadStrategy(),   BalancedStrategy(),     n=3)
+    #matchup(config, LookaheadStrategy(),   CooperativeStrategy(),  n=100)
+    #matchup(config, LookaheadStrategy(),   AggressiveStrategy(),   n=100)
+    #matchup(config, LookaheadStrategy(),   LookaheadStrategy(),    n=100)
 
 
 if __name__ == "__main__":
