@@ -68,7 +68,7 @@ CARD_ABBR = {
     Espionage:  "ESP",
     Relocation: "RLO",
     Overtime:   "OVT",
-    Summit:     "FLA",
+    Summit:     "SUM",
     Propaganda: "PRO",
     Occupation: "OCC",
 }
