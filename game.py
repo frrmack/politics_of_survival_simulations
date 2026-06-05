@@ -70,6 +70,28 @@ class PlayerView:
     round_num: int
     config: GameConfig
     history: list             # list of RoundRecord from previous rounds
+    discard: list             # visible discard pile contents (do not mutate)
+    draw_pile_size: int       # number of cards remaining in the draw pile (contents hidden)
+
+
+@dataclass
+class ResolutionView:
+    """Richer context passed to conditional-special callbacks (§3A).
+
+    Carries everything PlayerView has plus the face-up deployments for the
+    current round (reflecting any substitutions already applied by
+    earlier-resolved modules) and the live module states.
+    """
+    player_idx: int
+    hand: list
+    modules: list             # live module states as resolution proceeds (do not mutate)
+    round_num: int
+    config: GameConfig
+    history: list
+    discard: list
+    draw_pile_size: int
+    own_deployment: dict      # this player's face-up cards per module (post-substitution so far)
+    opponent_deployment: dict # opponent's face-up cards per module (post-substitution so far)
 
 
 # ---------------------------------------------------------------------------
@@ -185,10 +207,10 @@ class Game:
                isinstance(deployments[1][mod_idx], Embargo):
                 continue
 
-            # Per-module choice queue: (player_idx, 'salvage'|'espionage')
-            # Built in priority order: Salvage then Espionage, P1 before P2 each.
+            # Per-module choice queue: (player_idx, 'espionage'|'salvage')
+            # Priority order: Espionage before Salvage (§3C), P1 before P2 each.
             mod_queue: list = []
-            for cls, tag in [(Salvage, 'salvage'), (Espionage, 'espionage')]:
+            for cls, tag in [(Espionage, 'espionage'), (Salvage, 'salvage')]:
                 for pi in range(2):
                     if isinstance(deployments[pi][mod_idx], cls):
                         mod_queue.append((pi, tag))
@@ -196,20 +218,7 @@ class Game:
             qi = 0
             while qi < len(mod_queue):
                 pi, tag = mod_queue[qi]
-                if tag == 'salvage':
-                    available = list(self.deck._discard)
-                    if available:
-                        view = self._make_view(pi)
-                        chosen = self.strategies[pi].choose_salvage_card(
-                            view, mod_idx, available)
-                        salvage_choices[(mod_idx, pi)] = chosen
-                        resolved[pi][mod_idx] = chosen
-                        self.deck._discard.remove(chosen)
-                        if isinstance(chosen, Salvage):
-                            mod_queue.insert(qi + 1, (pi, 'salvage'))
-                        elif isinstance(chosen, Espionage):
-                            mod_queue.insert(qi + 1, (pi, 'espionage'))
-                elif tag == 'espionage':
+                if tag == 'espionage':
                     dep_set = list(deployments[pi].values())
                     hand_copy = list(self.hands[pi])
                     for dep in dep_set:
@@ -217,17 +226,30 @@ class Game:
                             hand_copy.remove(dep)
                     available = hand_copy  # non-deployed hand cards
                     if available:
-                        view = self._make_view(pi)
+                        rview = self._make_resolution_view(pi, resolved)
                         chosen = self.strategies[pi].choose_espionage_card(
-                            view, mod_idx, available)
+                            rview, mod_idx, available)
                         espionage_choices[(mod_idx, pi)] = chosen
                         resolved[pi][mod_idx] = chosen
                         self.hands[pi].remove(chosen)
                         espionage_used.append(chosen)
-                        if isinstance(chosen, Salvage):
-                            mod_queue.insert(qi + 1, (pi, 'salvage'))
-                        elif isinstance(chosen, Espionage):
+                        if isinstance(chosen, Espionage):
                             mod_queue.insert(qi + 1, (pi, 'espionage'))
+                        elif isinstance(chosen, Salvage):
+                            mod_queue.insert(qi + 1, (pi, 'salvage'))
+                elif tag == 'salvage':
+                    available = list(self.deck._discard)
+                    if available:
+                        rview = self._make_resolution_view(pi, resolved)
+                        chosen = self.strategies[pi].choose_salvage_card(
+                            rview, mod_idx, available)
+                        salvage_choices[(mod_idx, pi)] = chosen
+                        resolved[pi][mod_idx] = chosen
+                        self.deck._discard.remove(chosen)
+                        if isinstance(chosen, Espionage):
+                            mod_queue.insert(qi + 1, (pi, 'espionage'))
+                        elif isinstance(chosen, Salvage):
+                            mod_queue.insert(qi + 1, (pi, 'salvage'))
                 qi += 1
 
             # Relocation — on resolved cards after all chains; re-check for Embargo
@@ -240,9 +262,9 @@ class Game:
                     if len(neighbors) == 1:
                         target = neighbors[0]
                     else:
-                        view = self._make_view(pi)
+                        rview = self._make_resolution_view(pi, resolved)
                         target = self.strategies[pi].choose_relocation_target(
-                            view, mod_idx, neighbors)
+                            rview, mod_idx, neighbors)
                     relocation_targets[(mod_idx, pi)] = target
 
         return relocation_targets, salvage_choices, espionage_choices, espionage_used, resolved
@@ -310,6 +332,24 @@ class Game:
             round_num=self.round_num,
             config=self.config,
             history=self.history,
+            discard=list(self.deck._discard),
+            draw_pile_size=len(self.deck._draw),
+        )
+
+    def _make_resolution_view(self, player_idx: int, resolved: list) -> ResolutionView:
+        """Build a ResolutionView for conditional-special callbacks (§3A)."""
+        opp = 1 - player_idx
+        return ResolutionView(
+            player_idx=player_idx,
+            hand=self.hands[player_idx],
+            modules=self.modules,
+            round_num=self.round_num,
+            config=self.config,
+            history=self.history,
+            discard=list(self.deck._discard),
+            draw_pile_size=len(self.deck._draw),
+            own_deployment=dict(resolved[player_idx]),
+            opponent_deployment=dict(resolved[opp]),
         )
 
     def _get_neighbors(self, module_idx: int) -> list[int]:
@@ -398,3 +438,73 @@ class Game:
                 card.apply(module, player_idx)
             elif isinstance(card, SpecialCard):
                 card.resolve(module, player_idx, game=self)
+
+
+# ---------------------------------------------------------------------------
+# Pure round resolver (§3E) — used by LookaheadStrategy for forward simulation.
+# Works on card *classes* (types), not instances. dep0/dep1 must already have
+# Espionage/Salvage substituted (resolved deployments). Relocation targets are
+# passed separately because they affect other modules.
+# ---------------------------------------------------------------------------
+
+def resolve_round_pure(
+    module_states: list,    # list of (dev, infl0, infl1) tuples
+    dep0: dict,             # module_idx -> card class for player 0 (resolved)
+    dep1: dict,             # module_idx -> card class for player 1 (resolved)
+    reloc0: dict,           # module_idx -> target_idx for player 0 Relocations
+    reloc1: dict,           # module_idx -> target_idx for player 1 Relocations
+    config,
+) -> list:
+    """Return new list of (dev, infl0, infl1) tuples after resolving one round.
+
+    Replicates resolve_module semantics exactly: Embargo freeze; both-Military
+    special case with per-step dev clamping; StandardCard effects; Relocation
+    cross-module transfer. Modules processed in index order 0..num_modules-1.
+    """
+    DEV_MIN = config.module_min_development
+    DEV_MAX = config.module_max_development
+
+    states = [[s[0], s[1], s[2]] for s in module_states]
+
+    for mod_idx in range(config.num_modules):
+        c0 = dep0.get(mod_idx)
+        c1 = dep1.get(mod_idx)
+        if c0 is None or c1 is None:
+            continue
+        s = states[mod_idx]
+
+        if c0 is Embargo or c1 is Embargo:
+            continue
+
+        if c0 is Military and c1 is Military:
+            # Both-Military: +2 inf each, -1 dev each (per-step clamped)
+            s[1] += 2
+            s[0] = max(DEV_MIN, min(DEV_MAX, s[0] - 1))
+            s[2] += 2
+            s[0] = max(DEV_MIN, min(DEV_MAX, s[0] - 1))
+            continue
+
+        for card_cls, pi in [(c0, 0), (c1, 1)]:
+            infl_idx = pi + 1  # s[1]=infl0, s[2]=infl1
+            if card_cls is Engineers:
+                s[0] = max(DEV_MIN, min(DEV_MAX, s[0] + 1))
+            elif card_cls is Colonists:
+                s[infl_idx] += 1
+            elif card_cls is Military:
+                s[infl_idx] += 2
+            elif card_cls is Overtime:
+                s[0] = max(DEV_MIN, min(DEV_MAX, s[0] + 2))
+            elif card_cls is Summit:
+                s[infl_idx] += 1
+                s[0] = max(DEV_MIN, min(DEV_MAX, s[0] + 1))
+            elif card_cls is Propaganda:
+                s[infl_idx] += 2
+            elif card_cls is Relocation:
+                tgt = reloc0.get(mod_idx) if pi == 0 else reloc1.get(mod_idx)
+                if tgt is not None:
+                    s[infl_idx] -= 1
+                    states[tgt][infl_idx] += 1
+            # Embargo already handled above; Espionage/Salvage are pre-resolved;
+            # Occupation is cut from the game (count=0).
+
+    return [tuple(s) for s in states]

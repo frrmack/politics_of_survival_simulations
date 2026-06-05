@@ -18,7 +18,7 @@ from config import GameConfig
 from card import (Card, Engineers, Colonists, Military,
                   Embargo, Salvage, Espionage, Relocation, Overtime, Summit, Propaganda, Occupation)
 from module import Module
-from game import Game, PlayerView, RoundRecord
+from game import Game, PlayerView, ResolutionView, RoundRecord
 from strategy import (Strategy, CooperativeStrategy, AggressiveStrategy,
                       BalancedStrategy, RandomStrategy)
 
@@ -124,7 +124,7 @@ class HumanStrategy(Strategy):
     def set_relocation_target(self, module_idx: int, target_idx: int):
         self._relocation_targets[module_idx] = target_idx
 
-    def choose_relocation_target(self, _view: PlayerView, module_idx: int, _neighbors: list) -> int:
+    def choose_relocation_target(self, _view: ResolutionView, module_idx: int, _neighbors: list) -> int:
         return self._relocation_targets.pop(module_idx)
 
 # ---------------------------------------------------------------------------
@@ -542,7 +542,7 @@ class App:
         self.espionage_used_cards = []
         self.collected_relocation_targets = {}
 
-        # Unified queue: module by module, priority within module: Salvage > Espionage > Relocation
+        # Unified queue: module by module, priority within module: Espionage > Salvage > Relocation (§3C)
         self.pending_choices = []
         for mod_idx in range(g.config.num_modules):
             c1 = self.current_deployments[0][mod_idx]
@@ -550,11 +550,11 @@ class App:
             if isinstance(c1, Embargo) or isinstance(c2, Embargo):
                 continue
             for player_idx in range(2):
-                if isinstance(self.current_deployments[player_idx][mod_idx], Salvage):
-                    self.pending_choices.append(('salvage', player_idx, mod_idx))
-            for player_idx in range(2):
                 if isinstance(self.current_deployments[player_idx][mod_idx], Espionage):
                     self.pending_choices.append(('espionage', player_idx, mod_idx))
+            for player_idx in range(2):
+                if isinstance(self.current_deployments[player_idx][mod_idx], Salvage):
+                    self.pending_choices.append(('salvage', player_idx, mod_idx))
             for player_idx in range(2):
                 if isinstance(self.current_deployments[player_idx][mod_idx], Relocation):
                     neighbors = g._get_neighbors(mod_idx)
@@ -625,8 +625,8 @@ class App:
                 if player_idx in self.human_players:
                     self.state = CHOOSE_SALVAGE
                     return
-                view = g._make_view(player_idx)
-                chosen = g.strategies[player_idx].choose_salvage_card(view, mod_idx, available)
+                rview = g._make_resolution_view(player_idx, self.resolved_deployments)
+                chosen = g.strategies[player_idx].choose_salvage_card(rview, mod_idx, available)
                 self._apply_salvage(player_idx, mod_idx, chosen)
                 self.current_choice_idx += 1
             elif choice[0] == 'espionage':
@@ -638,8 +638,8 @@ class App:
                 if player_idx in self.human_players:
                     self.state = CHOOSE_ESPIONAGE
                     return
-                view = g._make_view(player_idx)
-                chosen = g.strategies[player_idx].choose_espionage_card(view, mod_idx, available)
+                rview = g._make_resolution_view(player_idx, self.resolved_deployments)
+                chosen = g.strategies[player_idx].choose_espionage_card(rview, mod_idx, available)
                 self._apply_espionage(player_idx, mod_idx, chosen)
                 self.current_choice_idx += 1
             elif choice[0] == 'relocation':
@@ -647,8 +647,8 @@ class App:
                 if player_idx in self.human_players:
                     self.state = CHOOSE_RELOCATION
                     return
-                view = g._make_view(player_idx)
-                target = g.strategies[player_idx].choose_relocation_target(view, mod_idx, neighbors)
+                rview = g._make_resolution_view(player_idx, self.resolved_deployments)
+                target = g.strategies[player_idx].choose_relocation_target(rview, mod_idx, neighbors)
                 self.collected_relocation_targets[(mod_idx, player_idx)] = target
                 self.current_choice_idx += 1
         self._finish_round()

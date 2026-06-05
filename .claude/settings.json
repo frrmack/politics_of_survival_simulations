@@ -3,7 +3,9 @@
     "allow": [
       "Bash(python -c ' *)",
       "Bash(python -c \"import ast; ast.parse\\(open\\('gui/main.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
-      "Bash(python -c \"import ast; [ast.parse\\(open\\(f\\).read\\(\\)\\) for f in ['card.py','config.py','game.py','strategy.py','replay.py','gui/main.py']]; print\\('syntax OK'\\)\")"
+      "Bash(python -c \"import ast; [ast.parse\\(open\\(f\\).read\\(\\)\\) for f in ['card.py','config.py','game.py','strategy.py','replay.py','gui/main.py']]; print\\('syntax OK'\\)\")",
+      "Bash(python -c \"from strategy import LookaheadStrategy; print\\('import OK'\\)\")",
+      "Bash(timeout 30 python -c ' *)"
     ]
   }
 }

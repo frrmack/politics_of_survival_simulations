@@ -3,7 +3,7 @@ Politics of Survival — baseline matchup simulations.
 Current design parameters: 5 modules, 4 needed to launch, 5 rounds, 3 card types.
 """
 from config import GameConfig
-from strategy import RandomStrategy, CooperativeStrategy, AggressiveStrategy, BalancedStrategy
+from strategy import RandomStrategy, CooperativeStrategy, AggressiveStrategy, BalancedStrategy, LookaheadStrategy
 from simulation import Simulation
 
 
@@ -32,6 +32,13 @@ def main():
     matchup(config, BalancedStrategy(),    AggressiveStrategy())
     matchup(config, AggressiveStrategy(),  RandomStrategy())
     matchup(config, AggressiveStrategy(),  AggressiveStrategy())
+
+    print("\n=== Lookahead matchups (n=100; raise for tighter intervals) ===\n")
+
+    matchup(config, LookaheadStrategy(),   BalancedStrategy(),     n=100)
+    matchup(config, LookaheadStrategy(),   CooperativeStrategy(),  n=100)
+    matchup(config, LookaheadStrategy(),   AggressiveStrategy(),   n=100)
+    matchup(config, LookaheadStrategy(),   LookaheadStrategy(),    n=100)
 
 
 if __name__ == "__main__":
