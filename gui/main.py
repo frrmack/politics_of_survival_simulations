@@ -370,7 +370,7 @@ class App:
     # ------------------------------------------------------------------
 
     def _init_setup(self):
-        self.p_type   = [0, 3]   # 0=Human, 1=Coop, 2=Agg, 3=Balanced, 4=Random
+        self.p_type   = [0, 4]   # 0=Human, 1=Coop, 2=Agg, 3=Balanced, 4=Lookahead
         self.sl_rounds  = Slider(200, 280, 300, 3, 8, 5, "Rounds")
         self.sl_modules = Slider(200, 360, 300, 4, 7, 5, "Modules")
         self.sl_launch  = Slider(200, 440, 300, 2, 6, 4, "Modules needed to launch")
